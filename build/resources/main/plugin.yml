@@ -1,0 +1,16 @@
+name: EasyTransport
+version: '2.1.3'
+main: me.easytransport.EasyTransportPlugin
+author: EasyTransport
+api-version: '26.1'
+depend: [Vault]
+description: Transport NPC teleportation and player stop applications using Vault economy.
+commands:
+  etr:
+    description: EasyTransport administration command
+    usage: /etr
+    aliases: [easytransport]
+permissions:
+  easytransport.admin:
+    description: Allows management of EasyTransport
+    default: op

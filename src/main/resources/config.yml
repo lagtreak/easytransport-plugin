@@ -1,0 +1,54 @@
+settings:
+  world-abroad: abroad
+  distance-per-price: 200.0
+  money-check-seconds: 5
+  abroad-base-price: 500.0
+
+transport:
+  bus:
+    display-name: "Аўтобус"
+    speed: 202.5
+    price-per-distance: 1.0
+    villager-type: JUNGLE
+  train:
+    display-name: "Цягнік"
+    speed: 337.5
+    price-per-distance: 3.0
+    villager-type: SAVANNA
+  air:
+    display-name: "Самалёт"
+    speed: 675.0
+    price-per-distance: 6.0
+    villager-type: SNOW
+
+regions:
+  brest:
+    name: "Брэсцкая"
+  vitebsk:
+    name: "Віцебская"
+  gomel:
+    name: "Гомельская"
+  grodno:
+    name: "Гродзенская"
+  mogilev:
+    name: "Магілёўская"
+  minsk:
+    name: "Мінская"
+  abroad:
+    name: "Замежжа"
+
+cashiers: {}
+
+between-teleports: {}
+
+stops: {}
+
+player-settings: {}
+
+# Актуальныя заяўкі і неатрыманыя рашэнні захоўваюцца ў асобных мінімальных YAML-файлах.
+
+
+discord:
+  enabled: false
+  webhook-url: ""
+  applications-message-id: ""
