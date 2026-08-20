@@ -20,6 +20,10 @@ public final class ChatMessages {
                 .append(Component.text(transport, NamedTextColor.GOLD).decorate(TextDecoration.BOLD))
                 .append(Component.text(".", NamedTextColor.GREEN));
     }
+    public static Component goldBold(String text) {
+        return Component.text(text, NamedTextColor.GOLD).decorate(TextDecoration.BOLD);
+    }
+
 
     public static Component stopDeleted(String city, String transport, String regionId) {
         return Component.text("Пункт «", NamedTextColor.GREEN)
@@ -99,6 +103,62 @@ public final class ChatMessages {
     }
 
     public static Component activeApplications(int count, boolean unused) { return activeApplications(count); }
+
+    public static Component worldAdded(String worldName) {
+        return Component.text("Мір «", NamedTextColor.GREEN)
+                .append(Component.text(worldName, NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text("» паспяхова дададзены ў EasyTransport.", NamedTextColor.GREEN));
+    }
+    public static Component worldRoleBound(String role, String worldName) {
+        String display = role.equalsIgnoreCase("abroad") ? "Замежжа" : "Беларускі край";
+        return Component.text(display + " цяпер абслугоўваецца светам «", NamedTextColor.GREEN)
+                .append(Component.text(worldName, NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text("».", NamedTextColor.GREEN));
+    }
+    public static Component worldDeleted(String worldName) {
+        return Component.text("Мір «", NamedTextColor.GREEN)
+                .append(Component.text(worldName, NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text("» выдалены з EasyTransport.", NamedTextColor.GREEN));
+    }
+    public static Component worldListEntry(String displayName, String worldName) {
+        return Component.text("• ", NamedTextColor.GREEN)
+                .append(Component.text(displayName, NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text(" (" + worldName + ")", NamedTextColor.GRAY));
+    }
+    public static Component worldInfoHeader(String displayName, String worldName) {
+        return Component.text("Мір «", NamedTextColor.WHITE)
+                .append(Component.text(displayName, NamedTextColor.GOLD).decorate(TextDecoration.BOLD))
+                .append(Component.text("» (" + worldName + ")", NamedTextColor.WHITE));
+    }
+    public static Component worldInfoTransport(String transport, boolean enabled) {
+        return Component.text(transport + ": ", NamedTextColor.WHITE)
+                .append(Component.text(enabled ? "уключаны" : "выключаны", enabled ? NamedTextColor.GREEN : NamedTextColor.RED));
+    }
+    public static Component worldInfoValue(String label, String value) {
+        return Component.text(label + ": ", NamedTextColor.WHITE)
+                .append(Component.text(value, NamedTextColor.WHITE).decorate(TextDecoration.BOLD));
+    }
+    public static Component worldNameChanged(String displayName) {
+        return Component.text("Назва свету зменена на «", NamedTextColor.GREEN)
+                .append(Component.text(displayName, NamedTextColor.GOLD).decorate(TextDecoration.BOLD))
+                .append(Component.text("».", NamedTextColor.GREEN));
+    }
+    public static Component worldTransportChanged(String transport, boolean enabled) {
+        return Component.text("Транспарт ", NamedTextColor.GREEN)
+                .append(Component.text(transport, NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text(": ", NamedTextColor.GREEN))
+                .append(Component.text(enabled ? "уключаны" : "выключаны", enabled ? NamedTextColor.GREEN : NamedTextColor.RED));
+    }
+    public static Component worldBasePriceChanged(double value) {
+        return Component.text("Базавая цана: ", NamedTextColor.GREEN)
+                .append(Component.text(String.valueOf(value), NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text(" BYN.", NamedTextColor.GREEN));
+    }
+    public static Component worldBaseTimeChanged(long value) {
+        return Component.text("Базавы час: ", NamedTextColor.GREEN)
+                .append(Component.text(String.valueOf(value), NamedTextColor.WHITE).decorate(TextDecoration.BOLD))
+                .append(Component.text(" с.", NamedTextColor.GREEN));
+    }
 
     public static Component discordStatus(boolean enabled, String url) {
         return Component.text("Discord webhook: ", NamedTextColor.WHITE)

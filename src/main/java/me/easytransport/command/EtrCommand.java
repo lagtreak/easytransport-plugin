@@ -13,13 +13,19 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
+import org.bukkit.World;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.bukkit.scheduler.BukkitTask;
 
 public final class EtrCommand implements CommandExecutor, TabCompleter {
     private final EasyTransportPlugin plugin;
+    private final Map<UUID, BukkitTask> pendingCashierDeleteConfirmations = new ConcurrentHashMap<>();
 
     public EtrCommand(EasyTransportPlugin plugin) {
         this.plugin = plugin;
@@ -55,6 +61,7 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
             player.sendMessage("/etr application - спіс актыўных заявак");
             player.sendMessage("/etr request create bus/train/air <Вобласць> <Назва> - падаць заяўку");
             player.sendMessage("/etr discord webhook <URL> | status | test | off | sync");
+            player.sendMessage("/etr world add/delete/list/info/name/transport/baseprice/basetime/bind ...");
             return true;
         }
 
@@ -68,15 +75,20 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
             case "particles" -> particles(player, args);
             case "application" -> application(player, args);
             case "request" -> applicationRequest(player, args);
+            case "world" -> world(player, args);
             default -> player.sendMessage(ChatMessages.red("Невядомая падкаманда."));
         }
         return true;
     }
 
     private void cashier(Player player, String[] args) {
-        if (args.length != 3) { player.sendMessage("Выкарыстанне: /etr cashier create/delete bus/train/air"); return; }
+        if (args.length == 2 && args[1].equalsIgnoreCase("deleteall")) {
+            requestDeleteAllCashiers(player);
+            return;
+        }
+        if (args.length != 3) { player.sendMessage("Выкарыстанне: /etr cashier create/delete/deleteall bus/train/air"); return; }
         TransportType type = TransportType.fromKey(args[2]);
-        if (type == null) { player.sendMessage("Транспарт: bus, train, air."); return; }
+        if (type == null) { player.sendMessage(ChatMessages.red("Транспарт: bus, train, air.")); return; }
         if (args[1].equalsIgnoreCase("create")) {
             Location playerLocation = player.getLocation();
             Location spawnLocation = playerLocation.getBlock().getLocation().add(0.5, 0.0, 0.5);
@@ -118,7 +130,12 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
     }
 
     private void stop(Player player, String[] args) {
-        if (args.length < 5) { player.sendMessage("Выкарыстанне: /etr stop create/delete bus/train/air <Вобласць> <Назва пункта>"); return; }
+        if (args.length == 2 && args[1].equalsIgnoreCase("deleteall")) {
+            plugin.data().removeAllStops();
+            player.sendMessage(ChatMessages.green("Усе зарэгістраваныя прыпынкі выдалены."));
+            return;
+        }
+        if (args.length < 5) { player.sendMessage("Выкарыстанне: /etr stop create/delete/deleteall bus/train/air <Вобласць> <Назва пункта>"); return; }
         TransportType type = TransportType.fromKey(args[2]);
         if (type == null) { player.sendMessage("Транспарт: bus, train, air."); return; }
         String region = plugin.data().findRegionId(args[3]);
@@ -126,8 +143,8 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
         String city = String.join(" ", java.util.Arrays.copyOfRange(args, 4, args.length));
         if (args[1].equalsIgnoreCase("create")) {
             String world = player.getWorld().getName();
-            if (!plugin.isWorld(world) && !plugin.isAbroad(world)) {
-                player.sendMessage(ChatMessages.red("Пункты можна ствараць толькі ў свеце world або ў Замежжы для самалётаў."));
+            if (!plugin.isManagedWorld(world) || !plugin.worldAllowsTransport(world, type)) {
+                player.sendMessage(ChatMessages.red("Пункт нельга стварыць: гэты свет або від транспарту не абслугоўваецца EasyTransport."));
                 return;
             }
             if (plugin.isAbroad(world)) {
@@ -135,10 +152,9 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage(ChatMessages.red("У Замежжы можна ствараць толькі авіяцыйныя пункты вобласці «Замежжа»."));
                     return;
                 }
-            } else {
-                if (!plugin.isWorld(world)) return;
-                if (region.equalsIgnoreCase("abroad")) {
-                    player.sendMessage(ChatMessages.red("Пункт вобласці «Замежжа» можна ствараць толькі ў свеце abroad."));
+            } else if (region.equalsIgnoreCase("abroad")) {
+                if (!plugin.isWorld(world) || type != TransportType.AIR) {
+                    player.sendMessage(ChatMessages.red("Пункты вобласці «Замежжа» ў Беларускім краі могуць быць толькі авіяцыйнымі."));
                     return;
                 }
             }
@@ -157,8 +173,8 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
         if (type == null) { player.sendMessage("Транспарт: bus, train, air."); return; }
         if (args[1].equalsIgnoreCase("create")) {
             String world = player.getWorld().getName();
-            if (!plugin.isWorld(world) && !(type == TransportType.AIR && plugin.isAbroad(world))) {
-                player.sendMessage(ChatMessages.red("Прамежкавыя пункты можна ствараць у world, а для самалёта таксама ў abroad."));
+            if (!plugin.isManagedWorld(world) || !plugin.worldAllowsTransport(world, type)) {
+                player.sendMessage(ChatMessages.red("Прамежкавая кропка нельга стварыць: гэты свет або від транспарту не абслугоўваецца EasyTransport."));
                 return;
             }
             plugin.data().saveBetween(type, player.getLocation());
@@ -221,6 +237,105 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(ChatMessages.speed(type.displayName(), String.valueOf(speed)));
         } catch (NumberFormatException ex) {
             player.sendMessage(ChatMessages.red("Хуткасць павінна быць лікам большым за 0."));
+        }
+    }
+
+    private void world(Player player, String[] args) {
+        if (args.length < 2) { player.sendMessage("Выкарыстанне: /etr world add/delete/list/info/name/transport/baseprice/basetime/bind ..."); return; }
+        String sub = args[1].toLowerCase();
+        if (sub.equals("bind")) {
+            if (args.length != 4 || !(args[2].equalsIgnoreCase("belarus") || args[2].equalsIgnoreCase("abroad"))) {
+                player.sendMessage("Выкарыстанне: /etr world bind <belarus|abroad> <ІмяСвету>");
+                return;
+            }
+            String targetWorld = args[3];
+            if (plugin.getServer().getWorld(targetWorld) == null) {
+                player.sendMessage(ChatMessages.red("Мір «" + targetWorld + "» не знойдзены на серверы."));
+                return;
+            }
+            if (plugin.bindRoleWorld(args[2], targetWorld)) {
+                player.sendMessage(ChatMessages.worldRoleBound(args[2], targetWorld));
+            } else {
+                player.sendMessage(ChatMessages.red("Не ўдалося змяніць мір для гэтай ролі."));
+            }
+            return;
+        }
+        if (sub.equals("list")) {
+            var section = plugin.getConfig().getConfigurationSection("worlds");
+            if (section == null) { player.sendMessage(ChatMessages.red("Няма наладжаных светаў.")); return; }
+            player.sendMessage(ChatMessages.green("Наладжаныя светы EasyTransport:"));
+            for (String worldName : section.getKeys(false)) {
+                player.sendMessage(ChatMessages.worldListEntry(plugin.worldDisplayName(worldName), worldName));
+            }
+            return;
+        }
+        if (sub.equals("add")) {
+            if (args.length != 3) { player.sendMessage("Выкарыстанне: /etr world add <ІмяСвету>"); return; }
+            String worldName = args[2];
+            if (plugin.isManagedWorld(worldName)) { player.sendMessage(ChatMessages.red("Мір «" + worldName + "» ужо дададзены ў EasyTransport.")); return; }
+            if (plugin.getServer().getWorld(worldName) == null) { player.sendMessage(ChatMessages.red("Мір «" + worldName + "» не знойдзены на серверы.")); return; }
+            plugin.addManagedWorld(worldName);
+            player.sendMessage(ChatMessages.worldAdded(worldName));
+            return;
+        }
+        if (sub.equals("delete")) {
+            if (args.length != 3) { player.sendMessage("Выкарыстанне: /etr world delete <ІмяСвету>"); return; }
+            String worldName = args[2];
+            if (!plugin.isManagedWorld(worldName)) { player.sendMessage(ChatMessages.red("Мір «" + worldName + "» не зарэгістраваны ў EasyTransport.")); return; }
+            String belarusWorld = plugin.getConfig().getString("settings.world-belarus", "world");
+            if (worldName.equalsIgnoreCase(belarusWorld) || worldName.equalsIgnoreCase(plugin.abroadWorld())) {
+                player.sendMessage(ChatMessages.red("Беларускі край і Замежжа нельга выдаліць з EasyTransport.")); return;
+            }
+            if (plugin.data().hasStopsInWorld(worldName)) { player.sendMessage(ChatMessages.red("Нельга выдаліць мір: у ім яшчэ ёсць зарэгістраваныя прыпынкі.")); return; }
+            plugin.removeManagedWorld(worldName);
+            player.sendMessage(ChatMessages.worldDeleted(worldName));
+            return;
+        }
+        if (sub.equals("info") || sub.equals("name") || sub.equals("transport") || sub.equals("baseprice") || sub.equals("basetime")) {
+            if (args.length < 3) {
+                player.sendMessage(ChatMessages.red("Не пазначаны свет."));
+                return;
+            }
+            if (!plugin.isManagedWorld(args[2])) {
+                player.sendMessage(ChatMessages.red("Мір «" + args[2] + "» не зарэгістраваны ў EasyTransport."));
+                return;
+            }
+        }
+        String worldName = args.length > 2 ? args[2] : "";
+        switch (sub) {
+            case "info" -> {
+                player.sendMessage(ChatMessages.worldInfoHeader(plugin.worldDisplayName(worldName), worldName));
+                player.sendMessage(ChatMessages.worldInfoTransport("Аўтобус", plugin.worldAllowsTransport(worldName, TransportType.BUS)));
+                player.sendMessage(ChatMessages.worldInfoTransport("Цягнік", plugin.worldAllowsTransport(worldName, TransportType.TRAIN)));
+                player.sendMessage(ChatMessages.worldInfoTransport("Самалёт", plugin.worldAllowsTransport(worldName, TransportType.AIR)));
+                player.sendMessage(ChatMessages.worldInfoValue("Базавая цана", plugin.worldBasePrice(worldName) + " BYN"));
+                player.sendMessage(ChatMessages.worldInfoValue("Базавы час", plugin.worldBaseTime(worldName) + " с."));
+            }
+            case "name" -> {
+                if (args.length < 4) { player.sendMessage("Выкарыстанне: /etr world name <ІмяСвету> <БеларускаяНазва>"); return; }
+                String displayName = String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length));
+                plugin.setWorldDisplayName(worldName, displayName);
+                player.sendMessage(ChatMessages.worldNameChanged(displayName));
+            }
+            case "transport" -> {
+                if (args.length != 5 || TransportType.fromKey(args[3]) == null) { player.sendMessage("Выкарыстанне: /etr world transport <ІмяСвету> <bus|train|air> <on|off>"); return; }
+                TransportType type = TransportType.fromKey(args[3]);
+                boolean enabled = args[4].equalsIgnoreCase("on");
+                if (!enabled && !args[4].equalsIgnoreCase("off")) { player.sendMessage(ChatMessages.red("Выкарыстайце on або off.")); return; }
+                plugin.setWorldTransport(worldName, type, enabled);
+                player.sendMessage(ChatMessages.worldTransportChanged(type.displayName(), enabled));
+            }
+            case "baseprice" -> {
+                if (args.length != 4) { player.sendMessage("Выкарыстанне: /etr world baseprice <ІмяСвету> <Цана>"); return; }
+                try { double v = Double.parseDouble(args[3]); if (v < 0) throw new NumberFormatException(); plugin.setWorldBasePrice(worldName, v); player.sendMessage(ChatMessages.worldBasePriceChanged(v)); }
+                catch (NumberFormatException ex) { player.sendMessage(ChatMessages.red("Цана павінна быць неадмоўным лікам.")); }
+            }
+            case "basetime" -> {
+                if (args.length != 4) { player.sendMessage("Выкарыстанне: /etr world basetime <ІмяСвету> <Секунды>"); return; }
+                try { long v = Long.parseLong(args[3]); if (v < 0) throw new NumberFormatException(); plugin.setWorldBaseTime(worldName, v); player.sendMessage(ChatMessages.worldBaseTimeChanged(v)); }
+                catch (NumberFormatException ex) { player.sendMessage(ChatMessages.red("Базавы час павінен быць неадмоўным цэлым лікам.")); }
+            }
+            default -> player.sendMessage("Выкарыстанне: /etr world add/delete/list/info/name/transport/baseprice/basetime ...");
         }
     }
 
@@ -310,6 +425,38 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
                 : ChatMessages.green("Часціцы над галавой адключаныя."));
     }
 
+    private void requestDeleteAllCashiers(Player player) {
+        BukkitTask old = pendingCashierDeleteConfirmations.remove(player.getUniqueId());
+        if (old != null) old.cancel();
+        player.sendMessage(ChatMessages.goldBold("Усе білетары будуць выдалены. Напішыце ў чат ПАЦВЕРДЖАЮ на працягу 120 секунд."));
+        BukkitTask timeout = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            BukkitTask task = pendingCashierDeleteConfirmations.remove(player.getUniqueId());
+            if (task != null && player.isOnline()) player.sendMessage(ChatMessages.red("Час на пацвярджэнне выдалення білетараў скончыўся."));
+        }, 120L * 20L);
+        pendingCashierDeleteConfirmations.put(player.getUniqueId(), timeout);
+    }
+
+    public boolean handleCashierDeleteConfirmation(Player player, String message) {
+        BukkitTask pending = pendingCashierDeleteConfirmations.remove(player.getUniqueId());
+        if (pending == null) return false;
+        pending.cancel();
+        if (!message.trim().equalsIgnoreCase("ПАЦВЕРДЖАЮ")) {
+            player.sendMessage(ChatMessages.red("Выдаленне білетараў адменена. Для пацвярджэння неабходна напісаць ПАЦВЕРДЖАЮ."));
+            return true;
+        }
+        for (World world : plugin.getServer().getWorlds()) {
+            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+                if (villager.getPersistentDataContainer().has(plugin.cashierKey(), PersistentDataType.STRING)) {
+                    villager.remove();
+                }
+            }
+        }
+        plugin.data().removeAllCashiers();
+        plugin.rebuildCashierIndex();
+        player.sendMessage(ChatMessages.green("Усе білетары выдалены."));
+        return true;
+    }
+
     private float normalizeYaw(float yaw) {
         float normalized = yaw % 360.0f;
         if (normalized < 0.0f) normalized += 360.0f;
@@ -322,12 +469,12 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
             if (!(sender instanceof Player p) || !p.isOp()) {
                 return partial(args[0], List.of("request", "particles"));
             }
-            return partial(args[0], List.of("cashier", "stop", "betweentp", "coast", "speed", "particles", "application", "discord", "request"));
+            return partial(args[0], List.of("cashier", "stop", "betweentp", "coast", "speed", "particles", "application", "discord", "request", "world"));
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("cashier")
                 || args[0].equalsIgnoreCase("stop")
                 || args[0].equalsIgnoreCase("betweentp")))
-            return partial(args[1], List.of("create", "delete"));
+            return partial(args[1], args[0].equalsIgnoreCase("cashier") ? List.of("create", "delete", "deleteall") : List.of("create", "delete", "deleteall"));
         if ((args[0].equalsIgnoreCase("cashier") || args[0].equalsIgnoreCase("betweentp") || args[0].equalsIgnoreCase("speed")) && args.length == 3)
             return partial(args[2], List.of("bus", "train", "air"));
         if (args[0].equalsIgnoreCase("coast") && args.length == 2)
@@ -338,6 +485,20 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
             return partial(args[3], plugin.data().getRegionIds().stream().map(plugin.data()::getRegionName).toList());
         if (args[0].equalsIgnoreCase("discord") && args.length == 2)
             return partial(args[1], List.of("webhook", "status", "test", "sync", "off"));
+        if (args[0].equalsIgnoreCase("world") && args.length == 2)
+            return partial(args[1], List.of("add", "delete", "list", "info", "name", "transport", "baseprice", "basetime", "bind"));
+        if (args[0].equalsIgnoreCase("world") && args.length == 3 && List.of("delete", "info", "name", "transport", "baseprice", "basetime").contains(args[1].toLowerCase()))
+            return partial(args[2], plugin.getConfig().getConfigurationSection("worlds") == null ? List.of() : plugin.getConfig().getConfigurationSection("worlds").getKeys(false).stream().toList());
+        if (args[0].equalsIgnoreCase("world") && args.length == 3 && args[1].equalsIgnoreCase("add"))
+            return partial(args[2], plugin.getServer().getWorlds().stream().map(w -> w.getName()).filter(w -> !plugin.isManagedWorld(w)).toList());
+        if (args[0].equalsIgnoreCase("world") && args.length == 3 && args[1].equalsIgnoreCase("bind"))
+            return partial(args[2], List.of("belarus", "abroad"));
+        if (args[0].equalsIgnoreCase("world") && args.length == 4 && args[1].equalsIgnoreCase("bind"))
+            return partial(args[3], plugin.getServer().getWorlds().stream().map(w -> w.getName()).toList());
+        if (args[0].equalsIgnoreCase("world") && args.length == 4 && args[1].equalsIgnoreCase("transport"))
+            return partial(args[3], List.of("bus", "train", "air"));
+        if (args[0].equalsIgnoreCase("world") && args.length == 5 && args[1].equalsIgnoreCase("transport"))
+            return partial(args[4], List.of("on", "off"));
         if (args[0].equalsIgnoreCase("request") && args.length == 2)
             return partial(args[1], List.of("create"));
         if (args[0].equalsIgnoreCase("request") && args.length == 3 && args[1].equalsIgnoreCase("create"))

@@ -35,6 +35,20 @@ public final class TravelService {
         return active.containsKey(player.getUniqueId());
     }
 
+    public Preview preview(Player player, TransportType type, Stop stop) {
+        StoredLocation middleStored = plugin.data().getBetween(type);
+        Location middle = middleStored == null ? null : middleStored.toLocation();
+        Location destination = stop.location().toLocation();
+        if (middle == null || destination == null) return null;
+        Location origin = player.getLocation().clone();
+        if (!routeAllowed(origin, destination, type)) return null;
+        double distance = travelDistance(origin, destination);
+        double speed = plugin.speed(type);
+        return new Preview(calculateTravelSeconds(origin, destination, type, speed),
+                calculatePrice(origin, destination, type, distance));
+    }
+
+
     public void start(Player player, TransportType type, Stop stop) {
         UUID uuid = player.getUniqueId();
         if (active.containsKey(uuid)) {
@@ -45,8 +59,12 @@ public final class TravelService {
         StoredLocation middleStored = plugin.data().getBetween(type);
         Location middle = middleStored == null ? null : middleStored.toLocation();
         Location destination = stop.location().toLocation();
-        if (middle == null || destination == null) {
-            player.sendMessage(ChatMessages.red("Транспартная кропка настроена няправільна."));
+        if (destination == null) {
+            player.sendMessage(ChatMessages.red("Кропка прызначэння настроена няправільна."));
+            return;
+        }
+        if (middle == null) {
+            player.sendMessage(ChatMessages.red("Для гэтага віду транспарту не наладжана прамежкавая кропка."));
             return;
         }
 
@@ -158,44 +176,40 @@ public final class TravelService {
     }
 
     private boolean routeAllowed(Location origin, Location destination, TransportType type) {
-        boolean originAbroad = isAbroad(origin);
-        boolean destinationAbroad = isAbroad(destination);
-        return (!originAbroad && !destinationAbroad) || type == TransportType.AIR;
+        if (origin.getWorld() == null || destination.getWorld() == null) return false;
+        String originWorld = origin.getWorld().getName();
+        String destinationWorld = destination.getWorld().getName();
+        if (!plugin.isManagedWorld(originWorld) || !plugin.isManagedWorld(destinationWorld)) return false;
+        return plugin.worldAllowsTransport(originWorld, type) && plugin.worldAllowsTransport(destinationWorld, type);
     }
 
     private long calculateTravelSeconds(Location origin, Location destination, TransportType type, double speed) {
-        boolean originAbroad = isAbroad(origin);
-        boolean destinationAbroad = isAbroad(destination);
-        if (originAbroad || destinationAbroad) {
-            double abroadDistance = Math.hypot(destination.getX(), destination.getZ());
-            return Math.max(30L, 30L + Math.round(abroadDistance / speed));
+        if (sameWorld(origin, destination)) {
+            return Math.max(1L, Math.round(horizontalDistance(origin, destination) / speed));
         }
-        return Math.max(1L, Math.round(travelDistance(origin, destination) / speed));
+        String destinationWorld = destination.getWorld().getName();
+        double destinationDistance = Math.hypot(destination.getX(), destination.getZ());
+        return Math.max(1L, plugin.worldBaseTime(destinationWorld) + Math.round(destinationDistance / speed));
     }
 
     private double calculatePrice(Location origin, Location destination, TransportType type, double distance) {
-        boolean originAbroad = isAbroad(origin);
-        boolean destinationAbroad = isAbroad(destination);
-        if (!originAbroad && !destinationAbroad) {
+        if (sameWorld(origin, destination)) {
             return Math.ceil(distance / plugin.distancePerPrice()) * plugin.price(type);
         }
-
-        Location abroadPoint = destinationAbroad ? destination : origin;
-        double abroadDistance = Math.hypot(abroadPoint.getX(), abroadPoint.getZ());
-        return plugin.abroadBasePrice()
-                + Math.ceil(abroadDistance / plugin.distancePerPrice()) * plugin.price(type);
+        String destinationWorld = destination.getWorld().getName();
+        double destinationDistance = Math.hypot(destination.getX(), destination.getZ());
+        return plugin.worldBasePrice(destinationWorld)
+                + Math.ceil(destinationDistance / plugin.distancePerPrice()) * plugin.price(type);
     }
 
     private double travelDistance(Location origin, Location destination) {
-        if (isAbroad(origin) || isAbroad(destination)) {
-            Location abroadPoint = isAbroad(destination) ? destination : origin;
-            return Math.hypot(abroadPoint.getX(), abroadPoint.getZ());
-        }
-        return horizontalDistance(origin, destination);
+        if (sameWorld(origin, destination)) return horizontalDistance(origin, destination);
+        return Math.hypot(destination.getX(), destination.getZ());
     }
 
-    private boolean isAbroad(Location location) {
-        return location.getWorld() != null && location.getWorld().getName().equalsIgnoreCase(plugin.abroadWorld());
+    private boolean sameWorld(Location a, Location b) {
+        return a.getWorld() != null && b.getWorld() != null
+                && a.getWorld().getName().equalsIgnoreCase(b.getWorld().getName());
     }
 
     private static double horizontalDistance(Location a, Location b) {
@@ -218,6 +232,8 @@ public final class TravelService {
             default -> Color.WHITE;
         };
     }
+
+    public record Preview(long seconds, double price) {}
 
     private static final class Trip {
         private final UUID uuid;

@@ -40,6 +40,12 @@ public final class TransportDataStore {
         plugin.saveConfig();
     }
 
+    public void removeAllCashiers() {
+        plugin.getConfig().set("cashiers", null);
+        plugin.getConfig().set("cashiers", new java.util.LinkedHashMap<>());
+        plugin.saveConfig();
+    }
+
     public void saveBetween(TransportType type, Location location) {
         writeLocation("between-teleports." + type.key(), location);
         plugin.saveConfig();
@@ -84,6 +90,23 @@ public final class TransportDataStore {
             if (stop.cityName().equalsIgnoreCase(cityName)) return stop;
         }
         return null;
+    }
+
+    public void removeAllStops() {
+        plugin.getConfig().set("stops", null);
+        plugin.getConfig().set("stops", new java.util.LinkedHashMap<>());
+        plugin.saveConfig();
+    }
+
+    public boolean hasStopsInWorld(String worldName) {
+        for (String regionId : getRegionIds()) {
+            for (TransportType type : TransportType.values()) {
+                for (Stop stop : getStops(regionId, type)) {
+                    if (stop.location().world().equalsIgnoreCase(worldName)) return true;
+                }
+            }
+        }
+        return false;
     }
 
     public Set<String> getRegionIds() {

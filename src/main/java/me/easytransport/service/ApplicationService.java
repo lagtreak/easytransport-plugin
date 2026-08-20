@@ -26,16 +26,16 @@ public final class ApplicationService {
 
     public boolean create(Player player, TransportType type, String regionId, String cityName) {
         String world = player.getWorld().getName();
-        if (!plugin.isWorld(world) && !plugin.isAbroad(world)) {
-            player.sendMessage(ChatMessages.red("Заяўкі можна ствараць толькі ў свеце world або abroad."));
+        if (!plugin.isManagedWorld(world) || !plugin.worldAllowsTransport(world, type)) {
+            player.sendMessage(ChatMessages.red("У гэтым свеце абраны від транспарту недаступны для EasyTransport."));
             return false;
         }
         if (plugin.isAbroad(world) && (type != TransportType.AIR || !regionId.equalsIgnoreCase("abroad"))) {
             player.sendMessage(ChatMessages.red("У Замежжы можна падаваць толькі авіяцыйныя заяўкі для вобласці «Замежжа»."));
             return false;
         }
-        if (plugin.isWorld(world) && regionId.equalsIgnoreCase("abroad")) {
-            player.sendMessage(ChatMessages.red("Для Замежжа патрэбен свет abroad."));
+        if (!plugin.isAbroad(world) && regionId.equalsIgnoreCase("abroad") && (!plugin.isWorld(world) || type != TransportType.AIR)) {
+            player.sendMessage(ChatMessages.red("Пункты вобласці «Замежжа» ў Беларускім краі могуць быць толькі авіяцыйнымі."));
             return false;
         }
         if (plugin.data().findStop(regionId, type, cityName) != null || plugin.applications().hasPendingDuplicate(regionId, type, cityName)) {
@@ -47,7 +47,7 @@ public final class ApplicationService {
                 StoredLocation.from(player.getLocation()), System.currentTimeMillis()
         );
         plugin.applications().saveApplication(app);
-        plugin.discord().syncApplications();
+        plugin.discord().createApplicationMessage(app);
         notifyAdminsNewApplication(app);
         player.sendMessage(ChatMessages.green("Заяўка на прыпынак «" + cityName + "» адпраўлена на разгляд."));
         return true;
@@ -63,9 +63,15 @@ public final class ApplicationService {
             plugin.applications().deleteApplication(app.id());
             return;
         }
-        plugin.data().saveStop(new Stop(app.regionId(), app.cityName(), app.transport(), app.location()));
+        plugin.data().saveStop(new Stop(
+                app.regionId(),
+                app.cityName(),
+                app.transport(),
+                app.location()
+        ));
+
+        plugin.discord().deleteApplicationMessage(app.id());
         plugin.applications().deleteApplication(app.id());
-        plugin.discord().syncApplications();
         deliverResult(app.playerUuid(), ChatMessages.playerApproved(app.cityName()));
         admin.sendMessage(ChatMessages.approved(app.cityName()));
     }
@@ -93,8 +99,8 @@ public final class ApplicationService {
             admin.sendMessage(ChatMessages.red("Гэтая заяўка ўжо не існуе."));
             return;
         }
+        plugin.discord().deleteApplicationMessage(app.id());
         plugin.applications().deleteApplication(app.id());
-        plugin.discord().syncApplications();
         String cleanReason = reason.isBlank() ? "Прычына не пазначаная." : reason.trim();
         deliverResult(app.playerUuid(), ChatMessages.playerRejected(app.cityName(), cleanReason));
         admin.sendMessage(ChatMessages.rejected(app.cityName()));

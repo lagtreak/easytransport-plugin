@@ -1,4 +1,5 @@
 settings:
+  world-belarus: world
   world-abroad: abroad
   distance-per-price: 200.0
   money-check-seconds: 5
@@ -47,6 +48,24 @@ player-settings: {}
 
 # Актуальныя заяўкі і неатрыманыя рашэнні захоўваюцца ў асобных мінімальных YAML-файлах.
 
+
+worlds:
+  world:
+    display-name: "Беларускі край"
+    base-price: 0.0
+    base-time: 30
+    transports:
+      bus: true
+      train: true
+      air: true
+  abroad:
+    display-name: "Замежжа"
+    base-price: 500.0
+    base-time: 30
+    transports:
+      bus: false
+      train: false
+      air: true
 
 discord:
   enabled: false

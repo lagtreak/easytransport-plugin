@@ -7,6 +7,7 @@ import me.easytransport.model.TransportType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.entity.Player;
@@ -20,6 +21,15 @@ public final class MenuListener implements Listener {
         this.menu = menu;
     }
 
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (menu.pendingTrip(player) != null) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -29,6 +39,26 @@ public final class MenuListener implements Listener {
                 .get(plugin.menuKey(), PersistentDataType.STRING);
         if (marker == null) return;
         event.setCancelled(true);
+
+        if ("confirm:start".equals(marker)) {
+            TransportMenu.PendingTrip pending = menu.pendingTrip(player);
+            if (pending == null) return;
+            menu.clearPendingTrip(player);
+            player.closeInventory();
+            plugin.travel().start(player, pending.type(), pending.stop());
+            return;
+        }
+
+        if ("confirm:cancel".equals(marker)) {
+            TransportMenu.PendingTrip pending = menu.pendingTrip(player);
+            menu.clearPendingTrip(player);
+            if (pending != null) {
+                menu.openRegions(player, pending.type());
+            } else {
+                player.closeInventory();
+            }
+            return;
+        }
 
         if (TransportMenu.BACK_MARKER.equals(marker)) {
             TransportType type = findTypeFromRegionsView(player);
@@ -52,7 +82,7 @@ public final class MenuListener implements Listener {
             String city = parts[3];
             if (type == null) return;
             Stop stop = plugin.data().findStop(regionId, type, city);
-            if (stop != null) plugin.travel().start(player, type, stop);
+            if (stop != null) menu.openConfirmation(player, type, stop);
         }
     }
 

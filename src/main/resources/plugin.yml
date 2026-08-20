@@ -1,10 +1,10 @@
 name: EasyTransport
-version: '2.1.3'
+version: '2.5.2'
 main: me.easytransport.EasyTransportPlugin
-author: EasyTransport
+author: zZlag
 api-version: '26.1'
 depend: [Vault]
-description: Transport NPC teleportation and player stop applications using Vault economy.
+description: -Хуискриплеш! -Эй так нельзя! -Хуйзя
 commands:
   etr:
     description: EasyTransport administration command
