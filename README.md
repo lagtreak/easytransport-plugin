@@ -56,7 +56,7 @@ EasyTransport - плагин для Рескублики, добавляющий
 
 Все билетеры имеют профессию рыбака, имя `Білетар` и направление, заданное администратором при создании.
 
-<img title="" src="file:///E:/easytransport/raw/2026-08-20_17.15.06.png" alt="2026-08-20_17.15.06.png" data-align="center" width="482">
+<img title="" src="file:///https://github.com/lagtreak/easytransport-plugin/blob/main/raw/2026-08-20_17.15.06.png" alt="2026-08-20_17.15.06.png" data-align="center" width="482">
 
 ---
 
