@@ -24,7 +24,7 @@ EasyTransport - плагин для Рескублики, добавляющий
 
 Скорость и цена настраиваются командами.
 
-<img title="" src="raw/a6e403cb5c4c1b2a.png" alt="a6e403cb5c4c1b2a.png" data-align="center" width="542">
+  <img title="" src="raw/a6e403cb5c4c1b2a.png" alt="a6e403cb5c4c1b2a.png" data-align="center" width="542">
 
 
 
@@ -42,9 +42,9 @@ EasyTransport - плагин для Рескублики, добавляющий
 
 В GUI области отображаются цветными блоками, города - цветными кожаными ботинками.
 
-<img title="" src="raw/Снимок%20экрана%202026-08-20%20172243.png" alt="Снимок экрана 2026-08-20 172243.png" data-align="center" width="384">
+  <img title="" src="raw/Снимок%20экрана%202026-08-20%20172243.png" alt="Снимок экрана 2026-08-20 172243.png" data-align="center" width="384">
 
-<img title="" src="raw/Снимок%20экрана%202026-08-20%20172426.png" alt="Снимок экрана 2026-08-20 172426.png" data-align="center" width="393">
+  <img title="" src="raw/Снимок%20экрана%202026-08-20%20172426.png" alt="Снимок экрана 2026-08-20 172426.png" data-align="center" width="393">
 
 ---
 
@@ -56,7 +56,7 @@ EasyTransport - плагин для Рескублики, добавляющий
 
 Все билетеры имеют профессию рыбака, имя `Білетар` и направление, заданное администратором при создании.
 
-<img title="" src="raw/2026-08-20_17.15.06.png" alt="2026-08-20_17.15.06.png" data-align="center" width="482">
+  <img title="" src="raw/2026-08-20_17.15.06.png" alt="2026-08-20_17.15.06.png" data-align="center" width="482">
 
 ---
 
@@ -159,7 +159,7 @@ EasyTransport может обслуживать любые существующ�
 
 Webhook синхронизирует активные заявки с Discord после создания, одобрения, отказа и перезапуска сервера.
 
-<img title="" src="raw/Снимок%20экрана%202026-08-20%20182906.png" alt="Снимок экрана 2026-08-20 182906.png" data-align="center" width="288">
+  <img title="" src="raw/Снимок%20экрана%202026-08-20%20182906.png" alt="Снимок экрана 2026-08-20 182906.png" data-align="center" width="288">
 
 
 
