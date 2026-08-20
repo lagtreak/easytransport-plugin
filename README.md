@@ -22,9 +22,11 @@ EasyTransport - плагин для Рескублики, добавляющий
 | Цягнік    | 337.5 блок./с | 3 BYN              |
 | Самалёт   | 675 блок./с   | 6 BYN              |
 
-<img title="" src="file:///E:/easytransport/raw/a6e403cb5c4c1b2a.png" alt="" data-align="center">
-
 Скорость и цена настраиваются командами.
+
+<img title="" src="file:///E:/easytransport/raw/a6e403cb5c4c1b2a.png" alt="a6e403cb5c4c1b2a.png" data-align="center" width="542">
+
+
 
 ---
 
@@ -40,9 +42,9 @@ EasyTransport - плагин для Рескублики, добавляющий
 
 В GUI области отображаются цветными блоками, города - цветными кожаными ботинками.
 
-<img title="" src="file:///E:/easytransport/raw/Снимок экрана 2026-08-20 172243.png" alt="Снимок экрана 2026-08-20 172243.png" width="395" data-align="center">
+<img title="" src="file:///E:/easytransport/raw/Снимок%20экрана%202026-08-20%20172243.png" alt="Снимок экрана 2026-08-20 172243.png" data-align="center" width="384">
 
-<img title="" src="file:///E:/easytransport/raw/Снимок экрана 2026-08-20 172426.png" alt="Снимок экрана 2026-08-20 172426.png" width="401" data-align="center">
+<img title="" src="file:///E:/easytransport/raw/Снимок%20экрана%202026-08-20%20172426.png" alt="Снимок экрана 2026-08-20 172426.png" data-align="center" width="393">
 
 ---
 
@@ -54,7 +56,7 @@ EasyTransport - плагин для Рескублики, добавляющий
 
 Все билетеры имеют профессию рыбака, имя `Білетар` и направление, заданное администратором при создании.
 
-<img title="" src="file:///E:/easytransport/raw/2026-08-20_17.15.06.png" alt="2026-08-20_17.15.06.png" width="538" data-align="center">
+<img title="" src="file:///E:/easytransport/raw/2026-08-20_17.15.06.png" alt="2026-08-20_17.15.06.png" data-align="center" width="482">
 
 ---
 
@@ -135,16 +137,13 @@ EasyTransport может обслуживать любые существующ�
 /etr application
 ```
 
-<img title="" src="file:///C:/Users/angam/AppData/Roaming/marktext/images/2026-08-20-17-31-19-image.png" alt="" data-align="center" width="432">
 Для каждой заявки доступны:
 
 * одобрение;
 * отказ с причиной;
 * телепортация к точке.
 
-<img title="" src="file:///E:/easytransport/raw/Снимок экрана 2026-08-20 173332.png" alt="Снимок экрана 2026-08-20 173332.png" data-align="center" width="390">
-
-Для одобрения в радиусе 50 блоков должен находиться билетер нужного транспорта. Это сделано, для того, чтобы администратор на забывал, из-за великого удобства одобрения, добавлять билетера. Для отказа билетер не требуется.
+Для одобрения в радиусе 50 блоков должен находиться билетер нужного транспорта. Для отказа билетер не требуется.
 
 После одобрения заявка превращается в обычную остановку.
 
@@ -158,8 +157,11 @@ EasyTransport может обслуживать любые существующ�
 /etr discord off
 ```
 
-<img title="" src="file:///C:/Users/angam/AppData/Roaming/marktext/images/2026-08-20-17-38-44-image.png" alt="" data-align="center" width="352">
 Webhook синхронизирует активные заявки с Discord после создания, одобрения, отказа и перезапуска сервера.
+
+<img title="" src="file:///E:/easytransport/raw/Снимок%20экрана%202026-08-20%20182906.png" alt="Снимок экрана 2026-08-20 182906.png" data-align="center" width="288">
+
+
 
 ## Частицы
 
@@ -167,4 +169,4 @@ Webhook синхронизирует активные заявки с Discord п
 /etr particles
 ```
 
-По умолчанию частицы включены, по ним видно в какую область отправляется игрок. Частицы представляют из себя нимб цвета области точки назначения.
+Игрок может включать и отключать частицы над головой во время поездки.
