@@ -1,6 +1,7 @@
 package me.easytransport;
 
 import me.easytransport.command.EtrCommand;
+import me.easytransport.integration.Pl3xMapIntegration;
 import me.easytransport.listener.CashierListener;
 import me.easytransport.listener.MenuListener;
 import me.easytransport.menu.TransportMenu;
@@ -38,6 +39,7 @@ public final class EasyTransportPlugin extends JavaPlugin {
     private ApplicationService applicationsService;
     private ApplicationMenu applicationMenu;
     private DiscordWebhookService discord;
+    private Pl3xMapIntegration pl3xMapIntegration;
     private final Map<UUID, TransportType> menuTypeByPlayer = new HashMap<>();
 
     @Override
@@ -48,6 +50,8 @@ public final class EasyTransportPlugin extends JavaPlugin {
         menuKey = new NamespacedKey(this, "menu_action");
         data = new TransportDataStore(this);
         applications = new ApplicationStore(this);
+        pl3xMapIntegration = new Pl3xMapIntegration(this);
+        pl3xMapIntegration.start();
         updateBelarusianRegionNames();
 
         RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
@@ -77,6 +81,9 @@ public final class EasyTransportPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (pl3xMapIntegration != null) {
+            pl3xMapIntegration.stop();
+        }
         if (travel != null) travel.cancelAll();
     }
 
@@ -270,7 +277,6 @@ public final class EasyTransportPlugin extends JavaPlugin {
             changed = true;
         }
 
-        // Normalize legacy built-in world entries if they exist under a different case.
         ensureBuiltInWorldDefaults(belarusWorld, "Беларускі край", 0.0, 30L, true, true, true);
         ensureBuiltInWorldDefaults(abroad, "Замежжа", getConfig().getDouble("settings.abroad-base-price", 500.0), 30L, false, false, true);
 
@@ -297,8 +303,6 @@ public final class EasyTransportPlugin extends JavaPlugin {
         getConfig().set("worlds." + key + ".transports.train", getConfig().getBoolean("worlds." + key + ".transports.train", train));
         getConfig().set("worlds." + key + ".transports.air", getConfig().getBoolean("worlds." + key + ".transports.air", air));
     }
-
-
 
     public boolean bindRoleWorld(String role, String targetWorld) {
         String settingPath;
@@ -343,7 +347,6 @@ public final class EasyTransportPlugin extends JavaPlugin {
         getConfig().set("worlds." + targetKey + ".transports.air", oldAir);
 
         getConfig().set(settingPath, targetWorld);
-        // The previous physical role-world is no longer an EasyTransport-managed world.
         if (!oldKey.equalsIgnoreCase(targetKey)) {
             getConfig().set("worlds." + oldKey, null);
         }

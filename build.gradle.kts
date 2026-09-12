@@ -3,8 +3,7 @@ plugins {
 }
 
 group = "me.easytransport"
-version = "2.5.2"
-
+version = "2.5.6"
 description = "EasyTransport - transport NPC teleportation system"
 
 repositories {
@@ -16,6 +15,10 @@ repositories {
         name = "jitpack"
         url = uri("https://jitpack.io")
     }
+    maven {
+        name = "Modrinth"
+        url = uri("https://api.modrinth.com/maven")
+    }
 }
 
 dependencies {
@@ -23,6 +26,7 @@ dependencies {
     compileOnly("com.github.MilkBowl:VaultAPI:1.7") {
         exclude(group = "org.bukkit", module = "bukkit")
     }
+    compileOnly("maven.modrinth:pl3xmap:26.1.2-550")
 }
 
 java {

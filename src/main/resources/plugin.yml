@@ -4,6 +4,7 @@ main: me.easytransport.EasyTransportPlugin
 author: zZlag
 api-version: '26.1'
 depend: [Vault]
+softdepend: [Pl3xMap]
 description: -Хуискриплеш! -Эй так нельзя! -Хуйзя
 commands:
   etr:

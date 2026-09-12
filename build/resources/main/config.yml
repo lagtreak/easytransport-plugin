@@ -46,9 +46,6 @@ stops: {}
 
 player-settings: {}
 
-# Актуальныя заяўкі і неатрыманыя рашэнні захоўваюцца ў асобных мінімальных YAML-файлах.
-
-
 worlds:
   world:
     display-name: "Беларускі край"
@@ -71,3 +68,15 @@ discord:
   enabled: false
   webhook-url: ""
   applications-message-id: ""
+
+pl3xmap:
+  enabled: true
+  icon-size: 32
+  refresh-ticks: 40
+  icons:
+    bus: pl3xmap/icons/bus.png
+    train: pl3xmap/icons/train.png
+    air: pl3xmap/icons/air.png
+    request-bus: pl3xmap/icons/request-bus.png
+    request-train: pl3xmap/icons/request-train.png
+    request-air: pl3xmap/icons/request-air.png
