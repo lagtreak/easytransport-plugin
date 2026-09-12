@@ -25,8 +25,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class TransportMenu {
-    public static final String REGION_TITLE_PREFIX = "Білетар — ";
-    public static final String CITY_PREFIX = "Білетар — ";
+    public static final String REGION_TITLE_PREFIX = "Білетэр — ";
+    public static final String CITY_PREFIX = "Білетэр — ";
     public static final String CONFIRM_TITLE = "EasyTransport: Пацвярджэнне";
     public static final String BACK_MARKER = "back:regions";
 

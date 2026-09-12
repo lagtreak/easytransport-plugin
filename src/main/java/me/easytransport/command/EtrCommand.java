@@ -106,11 +106,11 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
             villager.setAdult();
             villager.setAgeLock(true);
             villager.setBreed(false);
-            villager.customName(net.kyori.adventure.text.Component.text("Білетар", net.kyori.adventure.text.format.NamedTextColor.GOLD));
+            villager.customName(net.kyori.adventure.text.Component.text("Білетэр", net.kyori.adventure.text.format.NamedTextColor.GOLD));
             villager.setCustomNameVisible(true);
             plugin.data().saveCashier(type, villager);
             plugin.rebuildCashierIndex();
-            player.sendMessage(ChatMessages.green("Білетар створаны."));
+            player.sendMessage(ChatMessages.green("Білетэр створаны."));
         } else if (args[1].equalsIgnoreCase("delete")) {
             Villager target = null;
             double best = 5.0 * 5.0;
@@ -121,11 +121,11 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
                 double d = villager.getLocation().distanceSquared(player.getLocation());
                 if (d < best) { best = d; target = villager; }
             }
-            if (target == null) { player.sendMessage(ChatMessages.red("Побач няма патрэбнага білетара.")); return; }
+            if (target == null) { player.sendMessage(ChatMessages.red("Побач няма патрэбнага Білетэра.")); return; }
             target.remove();
             plugin.data().removeCashier(type);
             plugin.rebuildCashierIndex();
-            player.sendMessage(ChatMessages.green("Білетар выдалены."));
+            player.sendMessage(ChatMessages.green("Білетэр выдалены."));
         } else player.sendMessage("Выкарыстанне: /etr cashier create/delete bus/train/air");
     }
 
@@ -428,10 +428,10 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
     private void requestDeleteAllCashiers(Player player) {
         BukkitTask old = pendingCashierDeleteConfirmations.remove(player.getUniqueId());
         if (old != null) old.cancel();
-        player.sendMessage(ChatMessages.goldBold("Усе білетары будуць выдалены. Напішыце ў чат ПАЦВЕРДЖАЮ на працягу 120 секунд."));
+        player.sendMessage(ChatMessages.goldBold("Усе Білетэры будуць выдалены. Напішыце ў чат ПАЦВЕРДЖАЮ на працягу 120 секунд."));
         BukkitTask timeout = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             BukkitTask task = pendingCashierDeleteConfirmations.remove(player.getUniqueId());
-            if (task != null && player.isOnline()) player.sendMessage(ChatMessages.red("Час на пацвярджэнне выдалення білетараў скончыўся."));
+            if (task != null && player.isOnline()) player.sendMessage(ChatMessages.red("Час на пацвярджэнне выдалення Білетэраў скончыўся."));
         }, 120L * 20L);
         pendingCashierDeleteConfirmations.put(player.getUniqueId(), timeout);
     }
@@ -441,7 +441,7 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
         if (pending == null) return false;
         pending.cancel();
         if (!message.trim().equalsIgnoreCase("ПАЦВЕРДЖАЮ")) {
-            player.sendMessage(ChatMessages.red("Выдаленне білетараў адменена. Для пацвярджэння неабходна напісаць ПАЦВЕРДЖАЮ."));
+            player.sendMessage(ChatMessages.red("Выдаленне Білетэраў адменена. Для пацвярджэння неабходна напісаць ПАЦВЕРДЖАЮ."));
             return true;
         }
         for (World world : plugin.getServer().getWorlds()) {
@@ -453,7 +453,7 @@ public final class EtrCommand implements CommandExecutor, TabCompleter {
         }
         plugin.data().removeAllCashiers();
         plugin.rebuildCashierIndex();
-        player.sendMessage(ChatMessages.green("Усе білетары выдалены."));
+        player.sendMessage(ChatMessages.green("Усе Білетэры выдалены."));
         return true;
     }
 
