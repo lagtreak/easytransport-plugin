@@ -6,279 +6,297 @@ import me.easytransport.model.StopApplication;
 import me.easytransport.model.TransportType;
 import net.pl3x.map.core.Pl3xMap;
 import net.pl3x.map.core.image.IconImage;
-import net.pl3x.map.core.markers.layer.Layer;
 import net.pl3x.map.core.markers.layer.SimpleLayer;
-import net.pl3x.map.core.markers.marker.Icon;
+import net.pl3x.map.core.markers.marker.Marker;
 import net.pl3x.map.core.markers.option.Options;
-import net.pl3x.map.core.markers.option.Tooltip;
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitTask;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
-/**
- * Pl3xMap integration for EasyTransport stops and pending stop applications.
- */
 public final class Pl3xMapIntegration {
-    private static final String REQUEST_BUS_ICON = "easytransport_request_bus";
-    private static final String REQUEST_TRAIN_ICON = "easytransport_request_train";
-    private static final String REQUEST_AIR_ICON = "easytransport_request_air";
-
-    private static final String BUS_LAYER = "easytransport:bus";
-    private static final String TRAIN_LAYER = "easytransport:train";
-    private static final String AIR_LAYER = "easytransport:air";
-
-    private static final String REQUEST_BUS_LAYER = "easytransport:requests_bus";
-    private static final String REQUEST_TRAIN_LAYER = "easytransport:requests_train";
-    private static final String REQUEST_AIR_LAYER = "easytransport:requests_air";
+    private static final String MAP_PLUGIN_NAME = "Pl3xMap";
+    private static final String ICON_ROOT = "pl3xmap/icons/";
+    private static final String LAYER_ROOT = "easytransport";
 
     private final EasyTransportPlugin plugin;
-    private BukkitTask refreshTask;
+    private final Map<String, Map<TransportType, SimpleLayer>> stopLayersByWorld = new HashMap<>();
+    private final Map<String, Map<TransportType, SimpleLayer>> requestLayersByWorld = new HashMap<>();
+    private boolean enabled;
+    private boolean debugLogs;
 
     public Pl3xMapIntegration(EasyTransportPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void start() {
-        if (!plugin.getConfig().getBoolean("pl3xmap.enabled", true)) {
-            plugin.getLogger().info("Pl3xMap integration disabled by configuration.");
-            return;
-        }
+        debugLogs = plugin.getConfig().getBoolean("pl3xmap.debug", true);
+        debug("Starting Pl3xMap integration. debug=" + debugLogs);
 
-        if (!isAvailable()) {
-            plugin.getLogger().info("Pl3xMap not found. Map integration disabled.");
-            return;
-        }
-
-        registerIcons();
-        refresh();
-
-        long refreshTicks = Math.max(20L, plugin.getConfig().getLong("pl3xmap.refresh-ticks", 40L));
-        refreshTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, refreshTicks, refreshTicks);
-    }
-
-    public void stop() {
-        if (refreshTask != null) {
-            refreshTask.cancel();
-            refreshTask = null;
-        }
-    }
-
-    public void refresh() {
-        if (!isAvailable()) {
+        if (!Bukkit.getPluginManager().isPluginEnabled(MAP_PLUGIN_NAME)) {
+            plugin.getLogger().info("Pl3xMap not found or disabled; map integration skipped.");
             return;
         }
 
         try {
-            for (net.pl3x.map.core.world.World mapWorld : Pl3xMap.api().getWorldRegistry().values()) {
-                refreshWorld(mapWorld);
-                mapWorld.getMarkerTask().parse();
-                mapWorld.getLiveDataTask().parse();
-            }
-        } catch (Throwable throwable) {
-            plugin.getLogger().warning("Failed to refresh Pl3xMap markers: " + throwable.getMessage());
+            registerIcons();
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!Bukkit.getPluginManager().isPluginEnabled(MAP_PLUGIN_NAME)) {
+                    return;
+                }
+
+                createLayers();
+                enabled = true;
+                refresh();
+                plugin.getLogger().info("Pl3xMap integration enabled.");
+            });
+        } catch (Throwable t) {
+            plugin.getLogger().severe("Failed to initialize Pl3xMap integration: " + t.getMessage());
+            if (debugLogs) t.printStackTrace();
         }
     }
 
-    private void refreshWorld(net.pl3x.map.core.world.World mapWorld) {
-        SimpleLayer busLayer = getOrCreateLayer(BUS_LAYER, "Автобусные остановки", 50, mapWorld);
-        SimpleLayer trainLayer = getOrCreateLayer(TRAIN_LAYER, "Железнодорожные станции", 51, mapWorld);
-        SimpleLayer airLayer = getOrCreateLayer(AIR_LAYER, "Аэропорты", 52, mapWorld);
-
-        SimpleLayer requestBusLayer = getOrCreateLayer(REQUEST_BUS_LAYER, "Заявки на автобусные остановки", 60, mapWorld);
-        SimpleLayer requestTrainLayer = getOrCreateLayer(REQUEST_TRAIN_LAYER, "Заявки на железнодорожные станции", 61, mapWorld);
-        SimpleLayer requestAirLayer = getOrCreateLayer(REQUEST_AIR_LAYER, "Заявки на аэропорты", 62, mapWorld);
-
-        busLayer.clearMarkers();
-        trainLayer.clearMarkers();
-        airLayer.clearMarkers();
-        requestBusLayer.clearMarkers();
-        requestTrainLayer.clearMarkers();
-        requestAirLayer.clearMarkers();
-
-        for (String regionId : plugin.data().getRegionIds()) {
-            addStops(mapWorld, regionId, TransportType.BUS, busLayer);
-            addStops(mapWorld, regionId, TransportType.TRAIN, trainLayer);
-            addStops(mapWorld, regionId, TransportType.AIR, airLayer);
-        }
-
-        for (StopApplication application : plugin.applications().getApplications()) {
-            addApplication(mapWorld, application,
-                    application.transport() == TransportType.BUS ? requestBusLayer
-                            : application.transport() == TransportType.TRAIN ? requestTrainLayer
-                            : requestAirLayer,
-                    application.transport() == TransportType.BUS ? REQUEST_BUS_ICON
-                            : application.transport() == TransportType.TRAIN ? REQUEST_TRAIN_ICON
-                            : REQUEST_AIR_ICON);
-        }
+    public void stop() {
+        stopLayersByWorld.clear();
+        requestLayersByWorld.clear();
+        enabled = false;
     }
 
-    private void addStops(
-            net.pl3x.map.core.world.World mapWorld,
-            String regionId,
-            TransportType type,
-            SimpleLayer layer
-    ) {
-        for (Stop stop : plugin.data().getStops(regionId, type)) {
-            if (!stop.location().world().equalsIgnoreCase(mapWorld.getName())) {
-                continue;
-            }
-
-            String markerKey = "stop:" + regionId + ":" + type.key() + ":" + normalizeKey(stop.cityName());
-            String regionName = plugin.data().getRegionName(regionId);
-
-            String iconKey = approvedIconKey(type, regionId);
-
-            Icon marker = Icon.icon(
-                    markerKey,
-                    stop.location().x(),
-                    stop.location().z(),
-                    iconKey,
-                    iconSize()
-            );
-
-            marker.setOptions(new Options().setTooltip(new Tooltip()
-                    .setContent(stopTooltip(stop.cityName(), regionName))
-                    .setSticky(true)));
-
-            layer.addMarker(marker);
-        }
-    }
-
-    private void addApplication(
-            net.pl3x.map.core.world.World mapWorld,
-            StopApplication application,
-            SimpleLayer layer,
-            String iconKey
-    ) {
-        if (!application.location().world().equalsIgnoreCase(mapWorld.getName())) {
+    public void refresh() {
+        if (!enabled) {
+            debug("Refresh skipped: integration is not enabled yet.");
             return;
         }
 
-        String markerKey = "request:" + application.id();
-        String regionName = plugin.data().getRegionName(application.regionId());
+        for (Map<TransportType, SimpleLayer> layers : stopLayersByWorld.values()) {
+            for (SimpleLayer layer : layers.values()) {
+                layer.clearMarkers();
+            }
+        }
+        for (Map<TransportType, SimpleLayer> layers : requestLayersByWorld.values()) {
+            for (SimpleLayer layer : layers.values()) {
+                layer.clearMarkers();
+            }
+        }
 
-        Icon marker = Icon.icon(
-                markerKey,
-                application.location().x(),
-                application.location().z(),
-                iconKey,
-                iconSize()
+        for (net.pl3x.map.core.world.World mapWorld : Pl3xMap.api().getWorldRegistry().values()) {
+            String worldName = mapWorld.getName();
+            if (worldName == null || worldName.isBlank()) {
+                continue;
+            }
+
+            Map<TransportType, SimpleLayer> stopLayers = stopLayersByWorld.get(worldName.toLowerCase(Locale.ROOT));
+            Map<TransportType, SimpleLayer> requestLayers = requestLayersByWorld.get(worldName.toLowerCase(Locale.ROOT));
+            if (stopLayers == null || requestLayers == null) {
+                debug("No EasyTransport layers registered for map world: " + worldName);
+                continue;
+            }
+
+            int totalStops = 0;
+            int totalRequests = 0;
+
+            for (TransportType type : TransportType.values()) {
+                SimpleLayer stopLayer = stopLayers.get(type);
+                SimpleLayer requestLayer = requestLayers.get(type);
+
+                for (String regionId : getRegionIds()) {
+                    for (Stop stop : plugin.data().getStops(regionId, type)) {
+                        if (!sameWorld(stop.location().world(), worldName)) {
+                            continue;
+                        }
+                        addStopMarker(stopLayer, stop);
+                        totalStops++;
+                    }
+                }
+
+                for (StopApplication app : plugin.applications().getApplications()) {
+                    if (app.transport() != type || !sameWorld(app.location().world(), worldName)) {
+                        continue;
+                    }
+                    addRequestMarker(requestLayer, app);
+                    totalRequests++;
+                }
+            }
+
+            try {
+                mapWorld.getMarkerTask().parse();
+                mapWorld.getLiveDataTask().parse();
+            } catch (Throwable t) {
+                plugin.getLogger().warning("Failed to force Pl3xMap marker update for world '" + worldName + "': " + t.getMessage());
+                if (debugLogs) t.printStackTrace();
+            }
+
+            debug("World '" + worldName + "': stops=" + totalStops + ", requests=" + totalRequests);
+        }
+    }
+
+    private void createLayers() {
+        stopLayersByWorld.clear();
+        requestLayersByWorld.clear();
+
+        for (net.pl3x.map.core.world.World world : Pl3xMap.api().getWorldRegistry().values()) {
+            String worldKey = world.getName().toLowerCase(Locale.ROOT);
+            Map<TransportType, SimpleLayer> stopLayers = new EnumMap<>(TransportType.class);
+            Map<TransportType, SimpleLayer> requestLayers = new EnumMap<>(TransportType.class);
+
+            for (TransportType type : TransportType.values()) {
+                SimpleLayer stopLayer = new SimpleLayer(
+                        LAYER_ROOT + ".stops." + type.key(),
+                        () -> "Прыпынкі: " + belarusianTransportName(type)
+                );
+                stopLayer.setUpdateInterval(1);
+                stopLayer.setLiveUpdate(true);
+
+                SimpleLayer requestLayer = new SimpleLayer(
+                        LAYER_ROOT + ".requests." + type.key(),
+                        () -> "Заяўкі: " + belarusianTransportName(type)
+                );
+                requestLayer.setUpdateInterval(1);
+                requestLayer.setLiveUpdate(true);
+
+                world.getLayerRegistry().register(stopLayer.getKey(), stopLayer);
+                world.getLayerRegistry().register(requestLayer.getKey(), requestLayer);
+                stopLayers.put(type, stopLayer);
+                requestLayers.put(type, requestLayer);
+            }
+
+            stopLayersByWorld.put(worldKey, stopLayers);
+            requestLayersByWorld.put(worldKey, requestLayers);
+        }
+    }
+
+    private void addStopMarker(SimpleLayer layer, Stop stop) {
+        String markerKey = "stop." + stop.regionId() + "." + stop.transport().key() + "." + slug(stop.cityName());
+        String tooltip = tooltip(
+                "<strong>" + escape(stop.cityName()) + "</strong>",
+                isAbroad(stop.regionId()) ? "Замежжа" : "Вобласць: " + escape(getRegionName(stop.regionId())),
+                "Від: " + escape(belarusianTransportName(stop.transport()))
         );
 
-        marker.setOptions(new Options().setTooltip(new Tooltip()
-                .setContent(requestTooltip(application.cityName(), regionName, application.playerName()))
-                .setSticky(true)));
+        Marker<?> marker = Marker.icon(
+                markerKey,
+                stop.location().x(),
+                stop.location().z(),
+                approvedIconKey(stop.transport(), stop.regionId()),
+                32.0,
+                32.0 * 281.0 / 229.0
+        ).setOptions(Options.builder().tooltipContent(tooltip).build());
 
         layer.addMarker(marker);
     }
 
-    private SimpleLayer getOrCreateLayer(
-            String key,
-            String label,
-            int priority,
-            net.pl3x.map.core.world.World world
-    ) {
-        Layer existing = world.getLayerRegistry().get(key);
-        if (existing instanceof SimpleLayer simpleLayer) {
-            return simpleLayer;
-        }
+    private void addRequestMarker(SimpleLayer layer, StopApplication app) {
+        String markerKey = "request." + app.id();
+        String tooltip = tooltip(
+                "<strong>Заяўка на прыпынак</strong>",
+                "Горад: " + escape(app.cityName()),
+                isAbroad(app.regionId()) ? "Замежжа" : "Вобласць: " + escape(getRegionName(app.regionId())),
+                "Тып: " + escape(belarusianTransportName(app.transport())),
+                "Гулец: " + escape(app.playerName())
+        );
 
-        SimpleLayer layer = new SimpleLayer(key, () -> label);
-        layer.setShowControls(true)
-                .setDefaultHidden(false)
-                .setPriority(priority)
-                .setUpdateInterval(1)
-                .setLiveUpdate(true);
+        Marker<?> marker = Marker.icon(
+                markerKey,
+                app.location().x(),
+                app.location().z(),
+                requestIconKey(app.transport()),
+                32.0,
+                32.0 * 281.0 / 229.0
+        ).setOptions(Options.builder().tooltipContent(tooltip).build());
 
-        world.getLayerRegistry().register(key, layer);
-        return layer;
+        layer.addMarker(marker);
     }
 
     private void registerIcons() {
-        String[] regions = {
-                "minsk",
-                "gomel",
-                "brest",
-                "grodno",
-                "mogilev",
-                "vitebsk",
-                "abroad"
-        };
-
+        String[] regions = {"minsk", "gomel", "brest", "grodno", "mogilev", "vitebsk"};
         for (TransportType type : TransportType.values()) {
             for (String region : regions) {
-                registerIcon(
-                        approvedIconKey(type, region),
-                        ICON_ROOT + type.key() + "/" + region + ".png"
-                );
+                registerIcon(approvedIconKey(type, region), ICON_ROOT + type.key() + "/" + region + ".png");
             }
+            registerIcon(approvedIconKey(type, "abroad"), ICON_ROOT + type.key() + "/abroad.png");
+            registerIcon(requestIconKey(type), ICON_ROOT + "requests/" + type.key() + ".png");
         }
-
-        registerIcon(REQUEST_BUS_ICON, ICON_ROOT + "requests/bus.png");
-        registerIcon(REQUEST_TRAIN_ICON, ICON_ROOT + "requests/train.png");
-        registerIcon(REQUEST_AIR_ICON, ICON_ROOT + "requests/air.png");
-    }
-
-    private String approvedIconKey(TransportType type, String regionId) {
-        return "easytransport:" + type.key() + ":" + normalizeRegion(regionId);
-    }
-
-    private String normalizeRegion(String regionId) {
-        if (regionId == null || regionId.isBlank()) {
-            return "minsk";
-        }
-        String region = regionId.toLowerCase(Locale.ROOT).trim();
-        return switch (region) {
-            case "minsk", "gomel", "brest", "grodno", "mogilev", "vitebsk", "abroad" -> region;
-            default -> "minsk";
-        };
     }
 
     private void registerIcon(String key, String resourcePath) {
-        try (InputStream inputStream = plugin.getResource(resourcePath)) {
-            if (inputStream == null) {
-                plugin.getLogger().warning("Missing Pl3xMap icon resource: " + resourcePath);
-                return;
+        try (InputStream input = plugin.getResource(resourcePath)) {
+            if (input == null) {
+                throw new IllegalStateException("Missing resource " + resourcePath);
             }
-
-            BufferedImage image = ImageIO.read(inputStream);
+            BufferedImage image = ImageIO.read(input);
             if (image == null) {
-                plugin.getLogger().warning("Invalid Pl3xMap icon image: " + resourcePath);
-                return;
+                throw new IllegalStateException("Invalid image resource " + resourcePath);
             }
-
-            Pl3xMap.api().getIconRegistry().register(
-                    key,
-                    new IconImage(key, image, "png")
-            );
-        } catch (Exception exception) {
-            plugin.getLogger().warning("Failed to register Pl3xMap icon " + resourcePath + ": " + exception.getMessage());
+            Pl3xMap.api().getIconRegistry().register(key, new IconImage(key, image, "png"));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to register icon " + key + " from " + resourcePath, e);
         }
     }
 
-    private int iconSize() {
-        return Math.max(8, plugin.getConfig().getInt("pl3xmap.icon-size", 32));
-    }
-
-    private String stopTooltip(String city, String region) {
-        return "<div><strong>Остановка</strong><br>Город: " + escapeHtml(city)
-                + "<br>Область: " + escapeHtml(region) + "</div>";
-    }
-
-    private String requestTooltip(String city, String region, String playerName) {
-        return "<div><strong>Заявка на остановку</strong><br>Город: " + escapeHtml(city)
-                + "<br>Область: " + escapeHtml(region)
-                + "<br>Подал: " + escapeHtml(playerName) + "</div>";
-    }
-
-    private String escapeHtml(String value) {
-        if (value == null) {
-            return "";
+    private String approvedIconKey(TransportType type, String regionId) {
+        String region = normalizeRegion(regionId);
+        if ("abroad".equals(region)) {
+            return "easytransport." + type.key() + ".abroad";
         }
+        return switch (region) {
+            case "minsk", "gomel", "brest", "grodno", "mogilev", "vitebsk" ->
+                    "easytransport." + type.key() + "." + region;
+            default -> "easytransport." + type.key() + ".minsk";
+        };
+    }
+
+    private String requestIconKey(TransportType type) {
+        return "easytransport.requests." + type.key();
+    }
+
+    private boolean isAbroad(String regionId) {
+        return "abroad".equals(normalizeRegion(regionId));
+    }
+
+    private String belarusianTransportName(TransportType type) {
+        return switch (type) {
+            case BUS -> "Аўтобус";
+            case TRAIN -> "Цягнік";
+            case AIR -> "Самалёт";
+        };
+    }
+
+    private boolean sameWorld(String a, String b) {
+        return a != null && b != null && a.equalsIgnoreCase(b);
+    }
+
+    private String normalizeRegion(String regionId) {
+        return regionId == null ? "" : regionId.toLowerCase(Locale.ROOT).trim();
+    }
+
+    private Set<String> getRegionIds() {
+        var section = plugin.getConfig().getConfigurationSection("regions");
+        return section == null ? Set.of() : section.getKeys(false);
+    }
+
+    private String getRegionName(String regionId) {
+        return plugin.getConfig().getString("regions." + regionId + ".name", regionId);
+    }
+
+    private String slug(String value) {
+        if (value == null || value.isBlank()) return "unknown";
+        return value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9а-яё_-]+", "_")
+                .replaceAll("_+", "_");
+    }
+
+    private String tooltip(String... lines) {
+        return String.join("<br>", lines);
+    }
+
+    private String escape(String value) {
+        if (value == null) return "";
         return value.replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
@@ -286,14 +304,9 @@ public final class Pl3xMapIntegration {
                 .replace("'", "&#39;");
     }
 
-    private String normalizeKey(String value) {
-        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-zа-я0-9]+", "_");
-    }
-
-    private boolean isAvailable() {
-        return Bukkit.getPluginManager().getPlugin("Pl3xMap") != null
-                && Bukkit.getPluginManager().isPluginEnabled("Pl3xMap")
-                && Pl3xMap.api() != null
-                && Pl3xMap.api().isEnabled();
+    private void debug(String message) {
+        if (debugLogs) {
+            plugin.getLogger().info("[Pl3xMap] " + message);
+        }
     }
 }
