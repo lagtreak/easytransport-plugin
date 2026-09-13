@@ -1,5 +1,5 @@
 name: EasyTransport
-version: '2.5.2'
+version: '2.5.6'
 main: me.easytransport.EasyTransportPlugin
 author: zZlag
 api-version: '26.1'

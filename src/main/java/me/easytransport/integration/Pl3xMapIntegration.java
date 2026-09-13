@@ -34,12 +34,16 @@ public final class Pl3xMapIntegration {
     private final Map<String, Map<TransportType, SimpleLayer>> stopLayersByWorld = new HashMap<>();
     private final Map<String, Map<TransportType, SimpleLayer>> requestLayersByWorld = new HashMap<>();
     private boolean enabled;
+    private boolean debugLogs;
 
     public Pl3xMapIntegration(EasyTransportPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void start() {
+        debugLogs = plugin.getConfig().getBoolean("pl3xmap.debug", true);
+        debug("Starting Pl3xMap integration. debug=" + debugLogs);
+
         if (!Bukkit.getPluginManager().isPluginEnabled(MAP_PLUGIN_NAME)) {
             plugin.getLogger().info("Pl3xMap not found or disabled; map integration skipped.");
             return;
@@ -51,9 +55,11 @@ public final class Pl3xMapIntegration {
                 if (!Bukkit.getPluginManager().isPluginEnabled(MAP_PLUGIN_NAME)) {
                     return;
                 }
+                debug("Pl3xMap API is ready. Worlds=" + Pl3xMap.api().getWorldRegistry().values().size());
                 createLayers();
-                refresh();
                 enabled = true;
+                debug("EasyTransport Pl3xMap layers created. Starting first marker refresh.");
+                refresh();
                 plugin.getLogger().info("Pl3xMap integration enabled.");
             });
         } catch (Throwable t) {
@@ -70,8 +76,11 @@ public final class Pl3xMapIntegration {
 
     public void refresh() {
         if (!enabled) {
+            debug("Refresh skipped: integration is not enabled yet.");
             return;
         }
+
+        debug("Marker refresh started. Registered Pl3xMap worlds=" + Pl3xMap.api().getWorldRegistry().values().size());
 
         for (Map<TransportType, SimpleLayer> layers : stopLayersByWorld.values()) {
             for (SimpleLayer layer : layers.values()) {
@@ -87,14 +96,19 @@ public final class Pl3xMapIntegration {
         for (net.pl3x.map.core.world.World mapWorld : Pl3xMap.api().getWorldRegistry().values()) {
             String worldName = mapWorld.getName();
             if (worldName == null || worldName.isBlank()) {
+                debug("Skipping Pl3xMap world with empty name");
                 continue;
             }
 
             Map<TransportType, SimpleLayer> stopLayers = stopLayersByWorld.get(worldName.toLowerCase(Locale.ROOT));
             Map<TransportType, SimpleLayer> requestLayers = requestLayersByWorld.get(worldName.toLowerCase(Locale.ROOT));
             if (stopLayers == null || requestLayers == null) {
+                debug("No EasyTransport layers registered for map world: " + worldName);
                 continue;
             }
+
+            debug("Refreshing world '" + worldName + "' layers=" + mapWorld.getLayerRegistry().entrySet().size());            int totalStops = 0;
+            int totalRequests = 0;
 
             for (TransportType type : TransportType.values()) {
                 SimpleLayer stopLayer = stopLayers.get(type);
@@ -103,9 +117,11 @@ public final class Pl3xMapIntegration {
                 for (String regionId : getRegionIds()) {
                     for (Stop stop : plugin.data().getStops(regionId, type)) {
                         if (!sameWorld(stop.location().world(), worldName)) {
+                            debug("Stop world mismatch: city=" + stop.cityName() + ", stopWorld=" + stop.location().world() + ", mapWorld=" + worldName);
                             continue;
                         }
                         addStopMarker(stopLayer, stop);
+                        totalStops++;
                     }
                 }
 
@@ -114,9 +130,37 @@ public final class Pl3xMapIntegration {
                         continue;
                     }
                     addRequestMarker(requestLayer, app);
+                    totalRequests++;
                 }
             }
+
+            // Force an immediate markers.json/marker-file update instead of waiting for Pl3xMap's next task tick.
+            try {
+                mapWorld.getMarkerTask().parse();
+                mapWorld.getLiveDataTask().parse();
+            } catch (Throwable t) {
+                plugin.getLogger().warning("Failed to force Pl3xMap marker data update for world '" + worldName + "': " + t.getMessage());
+                if (debugLogs) t.printStackTrace();
+            }
+
+            debug("World '" + worldName + "': stops=" + totalStops + ", requests=" + totalRequests);
+
+            for (TransportType type : TransportType.values()) {
+                SimpleLayer stopLayer = stopLayers.get(type);
+                SimpleLayer requestLayer = requestLayers.get(type);
+                debug("World '" + worldName + "' layer " + type.key() + ": stops="
+                        + stopLayer.registeredMarkers().size() + ", requests=" + requestLayer.registeredMarkers().size());
+            }
         }
+
+        debug("Marker refresh finished.");
+    }
+
+    public void requestRefresh() {
+        if (!enabled) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, this::refresh);
     }
 
     private void createLayers() {
@@ -133,9 +177,13 @@ public final class Pl3xMapIntegration {
                 SimpleLayer stopLayer = new SimpleLayer(
                         LAYER_ROOT + ".stops." + type.key(),
                         () -> "Прыпынкі: " + belarusianTransportName(type));
+                stopLayer.setUpdateInterval(1);
+                stopLayer.setLiveUpdate(true);
                 SimpleLayer requestLayer = new SimpleLayer(
                         LAYER_ROOT + ".requests." + type.key(),
                         () -> "Заяўкі: " + belarusianTransportName(type));
+                requestLayer.setUpdateInterval(1);
+                requestLayer.setLiveUpdate(true);
 
                 world.getLayerRegistry().register(stopLayer.getKey(), stopLayer);
                 world.getLayerRegistry().register(requestLayer.getKey(), requestLayer);
@@ -165,7 +213,8 @@ public final class Pl3xMapIntegration {
                 stop.location().x(),
                 stop.location().z(),
                 iconKey,
-                32.0
+                40.0,
+                40.0 * 281.0 / 229.0
         ).setOptions(Options.builder()
                 .tooltipContent(tooltip)
                 .build());
@@ -191,7 +240,8 @@ public final class Pl3xMapIntegration {
                 app.location().x(),
                 app.location().z(),
                 requestIconKey(app.transport()),
-                32.0
+                32.0,
+                32.0 * 281.0 / 229.0
         ).setOptions(Options.builder()
                 .tooltipContent(tooltip)
                 .build());
@@ -224,6 +274,7 @@ public final class Pl3xMapIntegration {
                 throw new IllegalStateException("Invalid PNG resource " + resourcePath);
             }
             Pl3xMap.api().getIconRegistry().register(key, new IconImage(key, image, "png"));
+            debug("Registered icon: key=" + key + ", resource=" + resourcePath + ", size=" + image.getWidth() + "x" + image.getHeight());
         } catch (Exception e) {
             throw new IllegalStateException("Failed to register icon " + key + " from " + resourcePath, e);
         }
@@ -298,6 +349,12 @@ public final class Pl3xMapIntegration {
 
     private String tooltip(String... lines) {
         return String.join("<br>", lines);
+    }
+
+    private void debug(String message) {
+        if (debugLogs) {
+            plugin.getLogger().info("[Pl3xMap] " + message);
+        }
     }
 
     private String escape(String value) {

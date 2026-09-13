@@ -70,6 +70,7 @@ discord:
   applications-message-id: ""
 
 pl3xmap:
+  debug: true
   enabled: true
   icon-size: 32
   refresh-ticks: 40

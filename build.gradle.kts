@@ -3,7 +3,8 @@ plugins {
 }
 
 group = "me.easytransport"
-version = "2.5.6"
+version = "2.6.0"
+
 description = "EasyTransport - transport NPC teleportation system"
 
 repositories {

@@ -15,20 +15,25 @@ import me.easytransport.service.TravelService;
 import me.easytransport.storage.TransportDataStore;
 import net.milkbowl.vault.economy.Economy;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public final class EasyTransportPlugin extends JavaPlugin {
+public final class EasyTransportPlugin extends JavaPlugin implements Listener {
     private NamespacedKey cashierKey;
     private NamespacedKey menuKey;
     private TransportDataStore data;
@@ -46,27 +51,39 @@ public final class EasyTransportPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         initializeWorldSettings();
+
         cashierKey = new NamespacedKey(this, "cashier_type");
         menuKey = new NamespacedKey(this, "menu_action");
+
         data = new TransportDataStore(this);
         applications = new ApplicationStore(this);
+
         pl3xMapIntegration = new Pl3xMapIntegration(this);
         pl3xMapIntegration.start();
+
         updateBelarusianRegionNames();
 
-        RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
+        RegisteredServiceProvider<Economy> rsp =
+                getServer().getServicesManager().getRegistration(Economy.class);
+
         if (rsp == null) {
             getLogger().severe("Пастаўшчык Vault Economy не знойдзены. EasyTransport адключаны.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+
         economy = new EconomyService(rsp.getProvider());
         travel = new TravelService(this);
         menu = new TransportMenu(this);
         applicationsService = new ApplicationService(this);
         applicationMenu = new ApplicationMenu(this);
         discord = new DiscordWebhookService(this);
-        Bukkit.getScheduler().runTaskLater(this, () -> discord.syncApplications(), 20L);
+
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (discord != null) {
+                discord.syncApplications();
+            }
+        }, 20L);
 
         EtrCommand command = new EtrCommand(this);
         getCommand("etr").setExecutor(command);
@@ -74,8 +91,19 @@ public final class EasyTransportPlugin extends JavaPlugin {
 
         Bukkit.getPluginManager().registerEvents(new CashierListener(this, menu), this);
         Bukkit.getPluginManager().registerEvents(new MenuListener(this, menu), this);
-        Bukkit.getPluginManager().registerEvents(new me.easytransport.listener.ApplicationListener(this, applicationMenu), this);
-        Bukkit.getPluginManager().registerEvents(new me.easytransport.listener.AdminChatListener(command), this);
+        Bukkit.getPluginManager().registerEvents(
+                new me.easytransport.listener.ApplicationListener(this, applicationMenu),
+                this
+        );
+        Bukkit.getPluginManager().registerEvents(
+                new me.easytransport.listener.AdminChatListener(command),
+                this
+        );
+
+        Bukkit.getPluginManager().registerEvents(this, this);
+
+        migrateCashierNames();
+
         getLogger().info("EasyTransport enabled.");
     }
 
@@ -84,7 +112,10 @@ public final class EasyTransportPlugin extends JavaPlugin {
         if (pl3xMapIntegration != null) {
             pl3xMapIntegration.stop();
         }
-        if (travel != null) travel.cancelAll();
+
+        if (travel != null) {
+            travel.cancelAll();
+        }
     }
 
     private void updateBelarusianRegionNames() {
@@ -97,35 +128,82 @@ public final class EasyTransportPlugin extends JavaPlugin {
                 "minsk", "Мінская",
                 "abroad", "Замежжа"
         );
+
         boolean changed = false;
+
         for (Map.Entry<String, String> entry : names.entrySet()) {
             String path = "regions." + entry.getKey() + ".name";
+
             if (!entry.getValue().equals(getConfig().getString(path))) {
                 getConfig().set(path, entry.getValue());
                 changed = true;
             }
         }
-        if (changed) saveConfig();
+
+        if (changed) {
+            saveConfig();
+        }
     }
 
-    public NamespacedKey cashierKey() { return cashierKey; }
-    public NamespacedKey menuKey() { return menuKey; }
-    public TransportDataStore data() { return data; }
-    public ApplicationStore applications() { return applications; }
-    public ApplicationService applicationsService() { return applicationsService; }
-    public ApplicationMenu getApplicationMenu() { return applicationMenu; }
-    public DiscordWebhookService discord() { return discord; }
-    public EconomyService economy() { return economy; }
-    public TravelService travel() { return travel; }
-    public double distancePerPrice() { return getConfig().getDouble("settings.distance-per-price", 200.0); }
-    public int moneyCheckSeconds() { return Math.max(1, getConfig().getInt("settings.money-check-seconds", 5)); }
+    public NamespacedKey cashierKey() {
+        return cashierKey;
+    }
+
+    public NamespacedKey menuKey() {
+        return menuKey;
+    }
+
+    public TransportDataStore data() {
+        return data;
+    }
+
+    public ApplicationStore applications() {
+        return applications;
+    }
+
+    public ApplicationService applicationsService() {
+        return applicationsService;
+    }
+
+    public ApplicationMenu getApplicationMenu() {
+        return applicationMenu;
+    }
+
+    public DiscordWebhookService discord() {
+        return discord;
+    }
+
+    public EconomyService economy() {
+        return economy;
+    }
+
+    public TravelService travel() {
+        return travel;
+    }
+
+    public double distancePerPrice() {
+        return getConfig().getDouble("settings.distance-per-price", 200.0);
+    }
+
+    public int moneyCheckSeconds() {
+        return Math.max(
+                1,
+                getConfig().getInt("settings.money-check-seconds", 5)
+        );
+    }
 
     public double speed(TransportType type) {
-        return getConfig().getDouble("transport." + type.key() + ".speed", type.defaultSpeed());
+        return getConfig().getDouble(
+                "transport." + type.key() + ".speed",
+                type.defaultSpeed()
+        );
     }
 
     public double price(TransportType type) {
-        return getConfig().getDouble("transport." + type.key() + ".price-per-distance", type.defaultPrice());
+        return getConfig().getDouble(
+                "transport." + type.key() + ".price-per-distance",
+                type.defaultPrice()
+        );
     }
 
     public void setSpeed(TransportType type, double value) {
@@ -134,7 +212,10 @@ public final class EasyTransportPlugin extends JavaPlugin {
     }
 
     public void setPrice(TransportType type, double value) {
-        getConfig().set("transport." + type.key() + ".price-per-distance", value);
+        getConfig().set(
+                "transport." + type.key() + ".price-per-distance",
+                value
+        );
         saveConfig();
     }
 
@@ -149,22 +230,36 @@ public final class EasyTransportPlugin extends JavaPlugin {
     }
 
     public boolean particlesEnabled(Player player) {
-        return getConfig().getBoolean("player-settings." + player.getUniqueId() + ".particles-enabled", true);
+        return getConfig().getBoolean(
+                "player-settings." + player.getUniqueId() + ".particles-enabled",
+                true
+        );
     }
 
     public boolean toggleParticles(Player player) {
         boolean enabled = !particlesEnabled(player);
-        getConfig().set("player-settings." + player.getUniqueId() + ".particles-enabled", enabled);
+
+        getConfig().set(
+                "player-settings." + player.getUniqueId() + ".particles-enabled",
+                enabled
+        );
+
         saveConfig();
         return enabled;
     }
 
     public String abroadWorld() {
-        return getConfig().getString("settings.world-abroad", "abroad");
+        return getConfig().getString(
+                "settings.world-abroad",
+                "abroad"
+        );
     }
 
     public boolean isManagedWorld(String worldName) {
-        if (worldName == null || worldName.isBlank()) return false;
+        if (worldName == null || worldName.isBlank()) {
+            return false;
+        }
+
         String actual = findManagedWorldKey(worldName);
         return actual != null;
     }
@@ -175,139 +270,353 @@ public final class EasyTransportPlugin extends JavaPlugin {
 
     private String findManagedWorldKey(String worldName) {
         var section = getConfig().getConfigurationSection("worlds");
-        if (section == null || worldName == null) return null;
-        for (String key : section.getKeys(false)) {
-            if (key.equalsIgnoreCase(worldName)) return key;
+
+        if (section == null || worldName == null) {
+            return null;
         }
+
+        for (String key : section.getKeys(false)) {
+            if (key.equalsIgnoreCase(worldName)) {
+                return key;
+            }
+        }
+
         return null;
     }
 
     public String worldDisplayName(String worldName) {
         String key = managedWorldKey(worldName);
         String fallback = worldName == null ? "" : worldName;
-        return getConfig().getString("worlds." + (key == null ? fallback : key) + ".display-name", fallback);
+
+        return getConfig().getString(
+                "worlds." + (key == null ? fallback : key) + ".display-name",
+                fallback
+        );
     }
 
     public boolean worldAllowsTransport(String worldName, TransportType type) {
         String key = managedWorldKey(worldName);
-        return key != null && getConfig().getBoolean("worlds." + key + ".transports." + type.key(), false);
+
+        return key != null
+                && getConfig().getBoolean(
+                "worlds." + key + ".transports." + type.key(),
+                false
+        );
     }
 
     public double worldBasePrice(String worldName) {
         String key = managedWorldKey(worldName);
-        return getConfig().getDouble("worlds." + (key == null ? worldName : key) + ".base-price", 500.0);
+
+        return getConfig().getDouble(
+                "worlds." + (key == null ? worldName : key) + ".base-price",
+                500.0
+        );
     }
 
     public long worldBaseTime(String worldName) {
         String key = managedWorldKey(worldName);
-        return Math.max(0L, getConfig().getLong("worlds." + (key == null ? worldName : key) + ".base-time", 30L));
+
+        return Math.max(
+                0L,
+                getConfig().getLong(
+                        "worlds." + (key == null ? worldName : key) + ".base-time",
+                        30L
+                )
+        );
     }
 
     public boolean addManagedWorld(String worldName) {
-        if (isManagedWorld(worldName)) return false;
-        getConfig().set("worlds." + worldName + ".display-name", worldName);
-        getConfig().set("worlds." + worldName + ".base-price", 500.0);
-        getConfig().set("worlds." + worldName + ".base-time", 30L);
-        for (TransportType type : TransportType.values()) {
-            getConfig().set("worlds." + worldName + ".transports." + type.key(), true);
+        if (isManagedWorld(worldName)) {
+            return false;
         }
+
+        getConfig().set(
+                "worlds." + worldName + ".display-name",
+                worldName
+        );
+
+        getConfig().set(
+                "worlds." + worldName + ".base-price",
+                500.0
+        );
+
+        getConfig().set(
+                "worlds." + worldName + ".base-time",
+                30L
+        );
+
+        for (TransportType type : TransportType.values()) {
+            getConfig().set(
+                    "worlds." + worldName + ".transports." + type.key(),
+                    true
+            );
+        }
+
         saveConfig();
         return true;
     }
 
     public void removeManagedWorld(String worldName) {
         String key = managedWorldKey(worldName);
-        if (key == null) return;
+
+        if (key == null) {
+            return;
+        }
+
         getConfig().set("worlds." + key, null);
         saveConfig();
     }
 
     public void setWorldDisplayName(String worldName, String displayName) {
         String key = managedWorldKey(worldName);
-        if (key == null) return;
-        getConfig().set("worlds." + key + ".display-name", displayName);
+
+        if (key == null) {
+            return;
+        }
+
+        getConfig().set(
+                "worlds." + key + ".display-name",
+                displayName
+        );
+
         saveConfig();
     }
 
-    public void setWorldTransport(String worldName, TransportType type, boolean enabled) {
+    public void setWorldTransport(
+            String worldName,
+            TransportType type,
+            boolean enabled
+    ) {
         String key = managedWorldKey(worldName);
-        if (key == null) return;
-        getConfig().set("worlds." + key + ".transports." + type.key(), enabled);
+
+        if (key == null) {
+            return;
+        }
+
+        getConfig().set(
+                "worlds." + key + ".transports." + type.key(),
+                enabled
+        );
+
         saveConfig();
     }
 
     public void setWorldBasePrice(String worldName, double value) {
         String key = managedWorldKey(worldName);
-        if (key == null) return;
-        getConfig().set("worlds." + key + ".base-price", value);
+
+        if (key == null) {
+            return;
+        }
+
+        getConfig().set(
+                "worlds." + key + ".base-price",
+                value
+        );
+
         saveConfig();
     }
 
     public void setWorldBaseTime(String worldName, long value) {
         String key = managedWorldKey(worldName);
-        if (key == null) return;
-        getConfig().set("worlds." + key + ".base-time", value);
+
+        if (key == null) {
+            return;
+        }
+
+        getConfig().set(
+                "worlds." + key + ".base-time",
+                value
+        );
+
         saveConfig();
     }
 
     private void initializeWorldSettings() {
         boolean changed = false;
-        String belarusWorld = getConfig().getString("settings.world-belarus", "world");
+
+        String belarusWorld =
+                getConfig().getString(
+                        "settings.world-belarus",
+                        "world"
+                );
+
         String abroad = abroadWorld();
 
         if (!isManagedWorld(belarusWorld)) {
             String key = ensureWorldKey(belarusWorld);
-            getConfig().set("worlds." + key + ".display-name", "Беларускі край");
-            getConfig().set("worlds." + key + ".base-price", 0.0);
-            getConfig().set("worlds." + key + ".base-time", 30L);
+
+            getConfig().set(
+                    "worlds." + key + ".display-name",
+                    "Беларускі край"
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".base-price",
+                    0.0
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".base-time",
+                    30L
+            );
+
             for (TransportType type : TransportType.values()) {
-                getConfig().set("worlds." + key + ".transports." + type.key(), true);
+                getConfig().set(
+                        "worlds." + key + ".transports." + type.key(),
+                        true
+                );
             }
+
             changed = true;
         }
 
         if (!isManagedWorld(abroad)) {
             String key = ensureWorldKey(abroad);
-            getConfig().set("worlds." + key + ".display-name", "Замежжа");
-            getConfig().set("worlds." + key + ".base-price", getConfig().getDouble("settings.abroad-base-price", 500.0));
-            getConfig().set("worlds." + key + ".base-time", 30L);
-            getConfig().set("worlds." + key + ".transports.bus", false);
-            getConfig().set("worlds." + key + ".transports.train", false);
-            getConfig().set("worlds." + key + ".transports.air", true);
+
+            getConfig().set(
+                    "worlds." + key + ".display-name",
+                    "Замежжа"
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".base-price",
+                    getConfig().getDouble(
+                            "settings.abroad-base-price",
+                            500.0
+                    )
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".base-time",
+                    30L
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".transports.bus",
+                    false
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".transports.train",
+                    false
+            );
+
+            getConfig().set(
+                    "worlds." + key + ".transports.air",
+                    true
+            );
+
             changed = true;
         }
 
-        ensureBuiltInWorldDefaults(belarusWorld, "Беларускі край", 0.0, 30L, true, true, true);
-        ensureBuiltInWorldDefaults(abroad, "Замежжа", getConfig().getDouble("settings.abroad-base-price", 500.0), 30L, false, false, true);
+        ensureBuiltInWorldDefaults(
+                belarusWorld,
+                "Беларускі край",
+                0.0,
+                30L,
+                true,
+                true,
+                true
+        );
 
-        if (changed) saveConfig();
+        ensureBuiltInWorldDefaults(
+                abroad,
+                "Замежжа",
+                getConfig().getDouble(
+                        "settings.abroad-base-price",
+                        500.0
+                ),
+                30L,
+                false,
+                false,
+                true
+        );
+
+        if (changed) {
+            saveConfig();
+        }
     }
 
     private String ensureWorldKey(String worldName) {
-        var worlds = getConfig().getConfigurationSection("worlds");
+        var worlds =
+                getConfig().getConfigurationSection("worlds");
+
         if (worlds != null) {
             for (String key : worlds.getKeys(false)) {
-                if (key.equalsIgnoreCase(worldName)) return key;
+                if (key.equalsIgnoreCase(worldName)) {
+                    return key;
+                }
             }
         }
+
         return worldName;
     }
 
-    private void ensureBuiltInWorldDefaults(String worldName, String displayName, double basePrice, long baseTime,
-                                             boolean bus, boolean train, boolean air) {
+    private void ensureBuiltInWorldDefaults(
+            String worldName,
+            String displayName,
+            double basePrice,
+            long baseTime,
+            boolean bus,
+            boolean train,
+            boolean air
+    ) {
         String key = ensureWorldKey(worldName);
-        getConfig().set("worlds." + key + ".display-name", displayName);
-        getConfig().set("worlds." + key + ".base-price", getConfig().getDouble("worlds." + key + ".base-price", basePrice));
-        getConfig().set("worlds." + key + ".base-time", getConfig().getLong("worlds." + key + ".base-time", baseTime));
-        getConfig().set("worlds." + key + ".transports.bus", getConfig().getBoolean("worlds." + key + ".transports.bus", bus));
-        getConfig().set("worlds." + key + ".transports.train", getConfig().getBoolean("worlds." + key + ".transports.train", train));
-        getConfig().set("worlds." + key + ".transports.air", getConfig().getBoolean("worlds." + key + ".transports.air", air));
+
+        getConfig().set(
+                "worlds." + key + ".display-name",
+                displayName
+        );
+
+        getConfig().set(
+                "worlds." + key + ".base-price",
+                getConfig().getDouble(
+                        "worlds." + key + ".base-price",
+                        basePrice
+                )
+        );
+
+        getConfig().set(
+                "worlds." + key + ".base-time",
+                getConfig().getLong(
+                        "worlds." + key + ".base-time",
+                        baseTime
+                )
+        );
+
+        getConfig().set(
+                "worlds." + key + ".transports.bus",
+                getConfig().getBoolean(
+                        "worlds." + key + ".transports.bus",
+                        bus
+                )
+        );
+
+        getConfig().set(
+                "worlds." + key + ".transports.train",
+                getConfig().getBoolean(
+                        "worlds." + key + ".transports.train",
+                        train
+                )
+        );
+
+        getConfig().set(
+                "worlds." + key + ".transports.air",
+                getConfig().getBoolean(
+                        "worlds." + key + ".transports.air",
+                        air
+                )
+        );
     }
 
-    public boolean bindRoleWorld(String role, String targetWorld) {
+    public boolean bindRoleWorld(
+            String role,
+            String targetWorld
+    ) {
         String settingPath;
         String roleDisplay;
         boolean isAbroadRole;
+
         if (role.equalsIgnoreCase("belarus")) {
             settingPath = "settings.world-belarus";
             roleDisplay = "Беларускі край";
@@ -320,36 +629,119 @@ public final class EasyTransportPlugin extends JavaPlugin {
             return false;
         }
 
-        if (getServer().getWorld(targetWorld) == null) return false;
+        if (getServer().getWorld(targetWorld) == null) {
+            return false;
+        }
 
-        String currentWorld = getConfig().getString(settingPath, isAbroadRole ? "abroad" : "world");
-        String otherRolePath = isAbroadRole ? "settings.world-belarus" : "settings.world-abroad";
-        String otherRoleWorld = getConfig().getString(otherRolePath, isAbroadRole ? "world" : "abroad");
-        if (!currentWorld.equalsIgnoreCase(targetWorld) && otherRoleWorld.equalsIgnoreCase(targetWorld)) return false;
-        if (currentWorld.equalsIgnoreCase(targetWorld)) return true;
+        String currentWorld =
+                getConfig().getString(
+                        settingPath,
+                        isAbroadRole ? "abroad" : "world"
+                );
+
+        String otherRolePath =
+                isAbroadRole
+                        ? "settings.world-belarus"
+                        : "settings.world-abroad";
+
+        String otherRoleWorld =
+                getConfig().getString(
+                        otherRolePath,
+                        isAbroadRole ? "world" : "abroad"
+                );
+
+        if (!currentWorld.equalsIgnoreCase(targetWorld)
+                && otherRoleWorld.equalsIgnoreCase(targetWorld)) {
+            return false;
+        }
+
+        if (currentWorld.equalsIgnoreCase(targetWorld)) {
+            return true;
+        }
 
         String oldKey = managedWorldKey(currentWorld);
         String targetKey = managedWorldKey(targetWorld);
-        if (oldKey == null) oldKey = currentWorld;
 
-        double oldBasePrice = getConfig().getDouble("worlds." + oldKey + ".base-price", isAbroadRole ? 500.0 : 0.0);
-        long oldBaseTime = getConfig().getLong("worlds." + oldKey + ".base-time", 30L);
-        boolean oldBus = getConfig().getBoolean("worlds." + oldKey + ".transports.bus", !isAbroadRole);
-        boolean oldTrain = getConfig().getBoolean("worlds." + oldKey + ".transports.train", !isAbroadRole);
-        boolean oldAir = getConfig().getBoolean("worlds." + oldKey + ".transports.air", true);
-
-        if (targetKey == null) targetKey = targetWorld;
-        getConfig().set("worlds." + targetKey + ".display-name", roleDisplay);
-        getConfig().set("worlds." + targetKey + ".base-price", oldBasePrice);
-        getConfig().set("worlds." + targetKey + ".base-time", oldBaseTime);
-        getConfig().set("worlds." + targetKey + ".transports.bus", oldBus);
-        getConfig().set("worlds." + targetKey + ".transports.train", oldTrain);
-        getConfig().set("worlds." + targetKey + ".transports.air", oldAir);
-
-        getConfig().set(settingPath, targetWorld);
-        if (!oldKey.equalsIgnoreCase(targetKey)) {
-            getConfig().set("worlds." + oldKey, null);
+        if (oldKey == null) {
+            oldKey = currentWorld;
         }
+
+        double oldBasePrice =
+                getConfig().getDouble(
+                        "worlds." + oldKey + ".base-price",
+                        isAbroadRole ? 500.0 : 0.0
+                );
+
+        long oldBaseTime =
+                getConfig().getLong(
+                        "worlds." + oldKey + ".base-time",
+                        30L
+                );
+
+        boolean oldBus =
+                getConfig().getBoolean(
+                        "worlds." + oldKey + ".transports.bus",
+                        !isAbroadRole
+                );
+
+        boolean oldTrain =
+                getConfig().getBoolean(
+                        "worlds." + oldKey + ".transports.train",
+                        !isAbroadRole
+                );
+
+        boolean oldAir =
+                getConfig().getBoolean(
+                        "worlds." + oldKey + ".transports.air",
+                        true
+                );
+
+        if (targetKey == null) {
+            targetKey = targetWorld;
+        }
+
+        getConfig().set(
+                "worlds." + targetKey + ".display-name",
+                roleDisplay
+        );
+
+        getConfig().set(
+                "worlds." + targetKey + ".base-price",
+                oldBasePrice
+        );
+
+        getConfig().set(
+                "worlds." + targetKey + ".base-time",
+                oldBaseTime
+        );
+
+        getConfig().set(
+                "worlds." + targetKey + ".transports.bus",
+                oldBus
+        );
+
+        getConfig().set(
+                "worlds." + targetKey + ".transports.train",
+                oldTrain
+        );
+
+        getConfig().set(
+                "worlds." + targetKey + ".transports.air",
+                oldAir
+        );
+
+        getConfig().set(
+                settingPath,
+                targetWorld
+        );
+
+        if (!oldKey.equalsIgnoreCase(targetKey)) {
+            getConfig().set(
+                    "worlds." + oldKey,
+                    null
+            );
+        }
+
         saveConfig();
         return true;
     }
@@ -358,24 +750,130 @@ public final class EasyTransportPlugin extends JavaPlugin {
         menuTypeByPlayer.clear();
     }
 
-    public void rememberPlayerMenu(Player player, TransportType type) {
-        menuTypeByPlayer.put(player.getUniqueId(), type);
+    public void rememberPlayerMenu(
+            Player player,
+            TransportType type
+    ) {
+        menuTypeByPlayer.put(
+                player.getUniqueId(),
+                type
+        );
     }
 
-    public TransportType cashierTypeByPlayerMenu(Player player) {
-        return menuTypeByPlayer.get(player.getUniqueId());
+    public TransportType cashierTypeByPlayerMenu(
+            Player player
+    ) {
+        return menuTypeByPlayer.get(
+                player.getUniqueId()
+        );
     }
 
     public boolean isWorld(String worldName) {
-        return worldName != null && worldName.equalsIgnoreCase(getConfig().getString("settings.world-belarus", "world"));
+        return worldName != null
+                && worldName.equalsIgnoreCase(
+                getConfig().getString(
+                        "settings.world-belarus",
+                        "world"
+                )
+        );
     }
 
     public boolean isAbroad(String worldName) {
-        return worldName != null && worldName.equalsIgnoreCase(abroadWorld());
+        return worldName != null
+                && worldName.equalsIgnoreCase(
+                abroadWorld()
+        );
     }
 
-    public boolean isRegionAvailableForTransport(TransportType type, String regionId) {
-        if ("abroad".equalsIgnoreCase(regionId)) return type == TransportType.AIR;
+    public boolean isRegionAvailableForTransport(
+            TransportType type,
+            String regionId
+    ) {
+        if ("abroad".equalsIgnoreCase(regionId)) {
+            return type == TransportType.AIR;
+        }
+
         return true;
+    }
+
+    public void refreshPl3xMap() {
+        if (pl3xMapIntegration == null) {
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(
+                this,
+                pl3xMapIntegration::refresh
+        );
+    }
+
+    private void migrateCashierNames() {
+        int renamed = 0;
+
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            for (Villager villager :
+                    world.getEntitiesByClass(Villager.class)) {
+
+                if (!isCashier(villager)) {
+                    continue;
+                }
+
+                if (isOldCashierName(
+                        villager.getCustomName()
+                )) {
+                    renameCashier(villager);
+                    renamed++;
+                }
+            }
+        }
+
+        if (renamed > 0) {
+            getLogger().info(
+                    "Перайменавана білетэраў: " + renamed
+            );
+        }
+    }
+
+    private boolean isCashier(Villager villager) {
+        return villager.getPersistentDataContainer().has(
+                cashierKey,
+                PersistentDataType.STRING
+        );
+    }
+
+    private boolean isOldCashierName(String name) {
+        return "Бiлетар".equals(name)
+                || "Билетар".equals(name)
+                || "Білетар".equals(name);
+    }
+
+    private void renameCashier(Villager villager) {
+        villager.customName(
+                Component.text(
+                        "Бiлетэр",
+                        NamedTextColor.GOLD
+                )
+        );
+
+        villager.setCustomNameVisible(true);
+    }
+
+    @EventHandler
+    public void onCashierChunkLoad(ChunkLoadEvent event) {
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (!(entity instanceof Villager villager)) {
+                continue;
+            }
+
+            if (!isCashier(villager)) {
+                continue;
+            }
+
+            if (isOldCashierName(
+                    villager.getCustomName()
+            )) {
+                renameCashier(villager);
+            }
+        }
     }
 }
