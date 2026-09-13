@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "me.easytransport"
-version = "2.6.0"
+version = "2.6.2"
 
 description = "EasyTransport - transport NPC teleportation system"
 
@@ -17,7 +17,7 @@ repositories {
         url = uri("https://jitpack.io")
     }
     maven {
-        name = "Modrinth"
+        name = "modrinth"
         url = uri("https://api.modrinth.com/maven")
     }
 }
